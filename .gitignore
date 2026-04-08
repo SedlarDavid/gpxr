@@ -31,7 +31,9 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 .metadata
-/build/
+# Keep build/web for Firebase deploy, ignore the rest
+/build/*/
+!/build/web/
 /coverage/
 
 # Symbolication related
