@@ -169,6 +169,14 @@ class _RouteStats extends StatelessWidget {
           }
         }
 
+        // Prefer the GPX `<name>` element when set; otherwise fall back
+        // to the source filename without extension, which is what the
+        // user knows the file as. Only show "Untitled Route" as a last
+        // resort (e.g. a brand-new empty route).
+        final displayName = _firstNonBlank(data.name) ??
+            _filenameAsTitle(provider.fileName) ??
+            'Untitled Route';
+
         return Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -178,7 +186,7 @@ class _RouteStats extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      data.name ?? 'Untitled Route',
+                      displayName,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -247,6 +255,23 @@ class _RouteStats extends StatelessWidget {
         );
       },
     );
+  }
+
+  static String? _firstNonBlank(String? s) {
+    if (s == null) return null;
+    final t = s.trim();
+    return t.isEmpty ? null : t;
+  }
+
+  /// Turns a filename like `tor-des-geants-2024.gpx` into a friendly
+  /// display title by stripping the extension. Returns null if the
+  /// filename is missing or blank so the caller can fall back further.
+  static String? _filenameAsTitle(String? fileName) {
+    final name = _firstNonBlank(fileName);
+    if (name == null) return null;
+    final dot = name.lastIndexOf('.');
+    final stem = dot > 0 ? name.substring(0, dot) : name;
+    return _firstNonBlank(stem);
   }
 
   void _editRouteName(BuildContext context, GpxProvider provider) {
