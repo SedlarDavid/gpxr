@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/gpx_models.dart';
 import '../providers/gpx_provider.dart';
+import '../utils/elevation_profile.dart';
 import '../utils/geo_utils.dart';
 import '../utils/theme.dart';
 import '../utils/waypoint_icons.dart';
+import 'elevation_profile_chart.dart';
 
 class Sidebar extends StatelessWidget {
   const Sidebar({super.key});
@@ -217,6 +219,11 @@ class _RouteStats extends StatelessWidget {
                     tooltip: 'Waypoints',
                   ),
                 ],
+              ),
+              const SizedBox(height: 12),
+              ElevationProfileChart(
+                profile: ElevationProfile.fromPoints(trackPoints),
+                hoverDistance: provider.hoverDistance,
               ),
             ],
           ),

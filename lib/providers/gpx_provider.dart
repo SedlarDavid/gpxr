@@ -29,7 +29,18 @@ class GpxProvider extends ChangeNotifier {
   bool _showTrackPoints = false;
   bool get showTrackPoints => _showTrackPoints;
 
+  /// Cumulative distance (meters) of the currently hovered position along
+  /// the elevation profile. Kept as a [ValueNotifier] so high-frequency
+  /// hover updates don't rebuild the whole widget tree.
+  final ValueNotifier<double?> hoverDistance = ValueNotifier(null);
+
   bool get hasData => _data != null;
+
+  @override
+  void dispose() {
+    hoverDistance.dispose();
+    super.dispose();
+  }
 
   void loadFromString(String xml, String fileName) {
     try {
@@ -37,6 +48,7 @@ class GpxProvider extends ChangeNotifier {
       _fileName = fileName;
       _editMode = EditMode.view;
       _selectedPointId = null;
+      hoverDistance.value = null;
       notifyListeners();
     } catch (e) {
       throw Exception('Failed to parse GPX file: $e');
@@ -191,6 +203,32 @@ class GpxProvider extends ChangeNotifier {
     if (oldIndex < newIndex) newIndex--;
     final wpt = _data!.waypoints.removeAt(oldIndex);
     _data!.waypoints.insert(newIndex, wpt);
+    notifyListeners();
+  }
+
+  /// Reverses the order of all track and route points so the direction of
+  /// travel is inverted (start becomes finish and vice versa).
+  void reverseRoute() {
+    if (_data == null) return;
+    for (final track in _data!.tracks) {
+      for (final seg in track.segments) {
+        final reversed = seg.points.reversed.toList();
+        seg.points
+          ..clear()
+          ..addAll(reversed);
+      }
+      final revSegs = track.segments.reversed.toList();
+      track.segments
+        ..clear()
+        ..addAll(revSegs);
+    }
+    for (final r in _data!.routes) {
+      final reversed = r.points.reversed.toList();
+      r.points
+        ..clear()
+        ..addAll(reversed);
+    }
+    hoverDistance.value = null;
     notifyListeners();
   }
 

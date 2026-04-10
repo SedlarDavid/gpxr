@@ -115,6 +115,14 @@ class Toolbar extends StatelessWidget {
                     : null,
                 activeColor: const Color(0xFFEF4444),
               ),
+              const SizedBox(width: 16),
+              Container(width: 1, height: 24, color: AppTheme.borderColor),
+              const SizedBox(width: 16),
+              _ToolbarButton(
+                icon: Icons.swap_horiz_rounded,
+                label: 'Reverse',
+                onTap: provider.hasData ? provider.reverseRoute : null,
+              ),
               const Spacer(),
               // Toggles
               if (provider.hasData) ...[

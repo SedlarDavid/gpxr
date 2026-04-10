@@ -86,4 +86,19 @@ class GeoUtils {
   static double distanceBetween(LatLng a, LatLng b) {
     return _distance.as(LengthUnit.Meter, a, b);
   }
+
+  /// Returns the Mercator-projected direction angle (radians, 0 = up/north,
+  /// clockwise positive) for the heading from [a] to [b]. Matches how the
+  /// line appears on a Web Mercator map, so it's suitable for rotating
+  /// arrow icons along a polyline.
+  static double mercatorBearing(LatLng a, LatLng b) {
+    final lat1 = a.latitude * pi / 180;
+    final lat2 = b.latitude * pi / 180;
+    final y1 = log(tan(pi / 4 + lat1 / 2));
+    final y2 = log(tan(pi / 4 + lat2 / 2));
+    final dx = b.longitude - a.longitude;
+    final dy = y2 - y1;
+    if (dx == 0 && dy == 0) return 0;
+    return atan2(dx, dy);
+  }
 }

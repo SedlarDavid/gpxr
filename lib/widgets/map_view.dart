@@ -3,10 +3,12 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../models/gpx_models.dart';
 import '../providers/gpx_provider.dart';
+import '../utils/elevation_profile.dart';
 import '../utils/geo_utils.dart';
 import '../utils/theme.dart';
 import '../utils/waypoint_icons.dart';
@@ -22,11 +24,87 @@ class _MapViewState extends State<MapView> {
   final MapController _mapController = MapController();
   String? _draggingPointId;
   bool _isDraggingWaypoint = false;
+  String? _lastFittedFileName;
+  final ValueNotifier<Offset?> _hoverCursor = ValueNotifier(null);
 
   @override
   void dispose() {
+    _hoverCursor.dispose();
     _mapController.dispose();
     super.dispose();
+  }
+
+  void _updateHoverFromCursor(
+    Offset local,
+    ElevationProfile profile,
+    GpxProvider provider,
+  ) {
+    if (profile.isEmpty || profile.length < 2) {
+      _hoverCursor.value = null;
+      if (provider.hoverDistance.value != null) {
+        provider.hoverDistance.value = null;
+      }
+      return;
+    }
+
+    final camera = _mapController.camera;
+    // Project each profile point to screen space once.
+    final screen = List<math.Point<double>>.generate(
+      profile.length,
+      (i) => camera.latLngToScreenPoint(profile.points[i].latLng),
+      growable: false,
+    );
+
+    double bestSq = double.infinity;
+    int bestSeg = 0;
+    double bestT = 0;
+    for (int i = 0; i < screen.length - 1; i++) {
+      final a = screen[i];
+      final b = screen[i + 1];
+      final dx = b.x - a.x;
+      final dy = b.y - a.y;
+      final lenSq = dx * dx + dy * dy;
+      double t;
+      if (lenSq == 0) {
+        t = 0;
+      } else {
+        t = ((local.dx - a.x) * dx + (local.dy - a.y) * dy) / lenSq;
+        if (t < 0) t = 0;
+        if (t > 1) t = 1;
+      }
+      final px = a.x + t * dx;
+      final py = a.y + t * dy;
+      final ddx = px - local.dx;
+      final ddy = py - local.dy;
+      final sq = ddx * ddx + ddy * ddy;
+      if (sq < bestSq) {
+        bestSq = sq;
+        bestSeg = i;
+        bestT = t;
+      }
+    }
+
+    const threshold = 24.0;
+    if (bestSq > threshold * threshold) {
+      _hoverCursor.value = null;
+      if (provider.hoverDistance.value != null) {
+        provider.hoverDistance.value = null;
+      }
+      return;
+    }
+
+    final dA = profile.distances[bestSeg];
+    final dB = profile.distances[bestSeg + 1];
+    final d = dA + bestT * (dB - dA);
+    provider.hoverDistance.value = d;
+    _hoverCursor.value = local;
+  }
+
+  void _clearHover(GpxProvider provider) {
+    if (_hoverCursor.value != null) _hoverCursor.value = null;
+    if (provider.hoverDistance.value != null) {
+      provider.hoverDistance.value = null;
+    }
   }
 
   void _fitBounds(GpxData data) {
@@ -36,14 +114,40 @@ class _MapViewState extends State<MapView> {
     ];
     if (allPoints.isEmpty) return;
 
+    _mapController.rotate(0);
+
     if (allPoints.length == 1) {
       _mapController.move(allPoints.first, 14);
       return;
     }
 
-    final center = GeoUtils.center(allPoints);
-    final zoom = GeoUtils.fitZoom(allPoints);
-    _mapController.move(center, zoom);
+    final bounds = LatLngBounds.fromPoints(allPoints);
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: bounds,
+        padding: const EdgeInsets.all(48),
+        maxZoom: 17,
+      ),
+    );
+  }
+
+  void _zoomBy(double delta) {
+    final camera = _mapController.camera;
+    final newZoom = (camera.zoom + delta).clamp(3.0, 19.0);
+    _mapController.move(camera.center, newZoom);
+  }
+
+  void _maybeAutoFit(GpxData? data, String? fileName) {
+    if (data == null || fileName == null) {
+      _lastFittedFileName = null;
+      return;
+    }
+    if (fileName == _lastFittedFileName) return;
+    _lastFittedFileName = fileName;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _fitBounds(data);
+    });
   }
 
   void _handleMapTap(TapPosition tapPosition, LatLng latLng) {
@@ -148,9 +252,21 @@ class _MapViewState extends State<MapView> {
         final data = provider.data;
         final allPoints = data?.allLinePoints ?? [];
         final cursorStyle = _cursorForMode(provider.editMode);
+        _maybeAutoFit(data, provider.fileName);
+
+        final trackPoints = data == null
+            ? const <GpxTrackPoint>[]
+            : data.tracks.expand((t) => t.allPoints).toList();
+        final profile = ElevationProfile.fromPoints(trackPoints);
+        final hoverEnabled = provider.editMode == EditMode.view &&
+            profile.length >= 2;
 
         return MouseRegion(
           cursor: cursorStyle,
+          onHover: hoverEnabled
+              ? (e) => _updateHoverFromCursor(e.localPosition, profile, provider)
+              : null,
+          onExit: (_) => _clearHover(provider),
           child: Stack(
             children: [
               FlutterMap(
@@ -163,8 +279,14 @@ class _MapViewState extends State<MapView> {
                       ? GeoUtils.fitZoom(allPoints)
                       : 5,
                   onTap: _handleMapTap,
+                  onPositionChanged: (_, _) => _clearHover(provider),
                   interactionOptions: const InteractionOptions(
-                    flags: InteractiveFlag.all,
+                    flags: InteractiveFlag.drag |
+                        InteractiveFlag.flingAnimation |
+                        InteractiveFlag.pinchZoom |
+                        InteractiveFlag.doubleTapZoom |
+                        InteractiveFlag.scrollWheelZoom,
+                    rotationThreshold: 20.0,
                   ),
                 ),
                 children: [
@@ -172,23 +294,104 @@ class _MapViewState extends State<MapView> {
                     urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     userAgentPackageName: 'com.gpxr.app',
                     maxZoom: 19,
+                    tileProvider: CancellableNetworkTileProvider(),
                   ),
                   if (data != null) ..._buildTrackLayers(data, provider),
+                  if (data != null && profile.length >= 2)
+                    _buildDirectionMarkers(profile),
+                  if (data != null && profile.length >= 1)
+                    _buildStartFinishMarkers(profile),
                   if (data != null && provider.showWaypoints)
                     _buildWaypointLayer(data, provider),
+                  // Hover marker on the route.
+                  ValueListenableBuilder<double?>(
+                    valueListenable: provider.hoverDistance,
+                    builder: (context, d, _) {
+                      if (d == null || profile.isEmpty) {
+                        return const MarkerLayer(markers: []);
+                      }
+                      final sample = profile.sampleAtDistance(d);
+                      return MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: sample.latLng,
+                            width: 18,
+                            height: 18,
+                            child: IgnorePointer(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryColor,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 3,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.25),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ],
               ),
-              // Fit bounds button
-              if (data != null && allPoints.isNotEmpty)
-                Positioned(
-                  right: 12,
-                  bottom: 12,
-                  child: _MapButton(
-                    icon: Icons.fit_screen_rounded,
-                    tooltip: 'Fit to route',
-                    onTap: () => _fitBounds(data),
-                  ),
+              // Hover tooltip following the cursor.
+              ValueListenableBuilder<Offset?>(
+                valueListenable: _hoverCursor,
+                builder: (context, cursor, _) {
+                  if (cursor == null) return const SizedBox.shrink();
+                  return ValueListenableBuilder<double?>(
+                    valueListenable: provider.hoverDistance,
+                    builder: (context, d, _) {
+                      if (d == null) return const SizedBox.shrink();
+                      final sample = profile.sampleAtDistance(d);
+                      return _HoverTooltip(
+                        cursor: cursor,
+                        distance: sample.distance,
+                        elevation: sample.elevation,
+                      );
+                    },
+                  );
+                },
+              ),
+              // Map controls (bottom right)
+              Positioned(
+                right: 12,
+                bottom: 12,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (data != null && allPoints.isNotEmpty) ...[
+                      _MapButton(
+                        icon: Icons.fit_screen_rounded,
+                        tooltip: 'Fit to route',
+                        onTap: () => _fitBounds(data),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    _MapButton(
+                      icon: Icons.add_rounded,
+                      tooltip: 'Zoom in',
+                      onTap: () => _zoomBy(1),
+                    ),
+                    const SizedBox(height: 8),
+                    _MapButton(
+                      icon: Icons.remove_rounded,
+                      tooltip: 'Zoom out',
+                      onTap: () => _zoomBy(-1),
+                    ),
+                  ],
                 ),
+              ),
               // Edit mode indicator
               if (provider.editMode != EditMode.view)
                 Positioned(
@@ -244,6 +447,86 @@ class _MapViewState extends State<MapView> {
         );
       },
     );
+  }
+
+  Widget _buildDirectionMarkers(ElevationProfile profile) {
+    const maxArrows = 14;
+    const minSpacingMeters = 250.0;
+    final total = profile.totalDistance;
+    if (total < 150) return const MarkerLayer(markers: []);
+
+    final spacing = math.max(total / (maxArrows + 1), minSpacingMeters);
+    final markers = <Marker>[];
+    double d = spacing;
+    while (d < total) {
+      final delta = math.min(10.0, total * 0.02);
+      final before = profile.sampleAtDistance(math.max(0, d - delta));
+      final after = profile.sampleAtDistance(math.min(total, d + delta));
+      final angle = GeoUtils.mercatorBearing(before.latLng, after.latLng);
+      final pos = profile.sampleAtDistance(d);
+      markers.add(
+        Marker(
+          point: pos.latLng,
+          width: 18,
+          height: 18,
+          alignment: Alignment.center,
+          child: IgnorePointer(
+            child: Transform.rotate(
+              angle: angle,
+              child: Icon(
+                Icons.navigation_rounded,
+                size: 16,
+                color: AppTheme.trackColor.withValues(alpha: 0.9),
+                shadows: const [
+                  Shadow(color: Colors.white, blurRadius: 2),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      d += spacing;
+    }
+    return MarkerLayer(markers: markers);
+  }
+
+  Widget _buildStartFinishMarkers(ElevationProfile profile) {
+    final markers = <Marker>[];
+    if (profile.points.isNotEmpty) {
+      markers.add(
+        Marker(
+          point: profile.points.first.latLng,
+          width: 28,
+          height: 28,
+          alignment: Alignment.center,
+          child: IgnorePointer(
+            child: _EndpointBadge(
+              color: const Color(0xFF22C55E),
+              icon: Icons.play_arrow_rounded,
+              tooltip: 'Start',
+            ),
+          ),
+        ),
+      );
+    }
+    if (profile.points.length > 1) {
+      markers.add(
+        Marker(
+          point: profile.points.last.latLng,
+          width: 28,
+          height: 28,
+          alignment: Alignment.center,
+          child: IgnorePointer(
+            child: _EndpointBadge(
+              color: const Color(0xFFEF4444),
+              icon: Icons.flag_rounded,
+              tooltip: 'Finish',
+            ),
+          ),
+        ),
+      );
+    }
+    return MarkerLayer(markers: markers);
   }
 
   List<Widget> _buildTrackLayers(GpxData data, GpxProvider provider) {
@@ -479,6 +762,139 @@ class _TrianglePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _EndpointBadge extends StatelessWidget {
+  const _EndpointBadge({
+    required this.color,
+    required this.icon,
+    required this.tooltip,
+  });
+
+  final Color color;
+  final IconData icon;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 3),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.25),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        alignment: Alignment.center,
+        child: Icon(icon, color: Colors.white, size: 14),
+      ),
+    );
+  }
+}
+
+class _HoverTooltip extends StatelessWidget {
+  const _HoverTooltip({
+    required this.cursor,
+    required this.distance,
+    required this.elevation,
+  });
+
+  final Offset cursor;
+  final double distance;
+  final double? elevation;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const width = 140.0;
+        const height = 44.0;
+        double left = cursor.dx + 14;
+        double top = cursor.dy + 14;
+        if (left + width > constraints.maxWidth - 4) {
+          left = cursor.dx - width - 14;
+        }
+        if (top + height > constraints.maxHeight - 4) {
+          top = cursor.dy - height - 14;
+        }
+        if (left < 4) left = 4;
+        if (top < 4) top = 4;
+
+        return Positioned(
+          left: left,
+          top: top,
+          child: IgnorePointer(
+            child: Container(
+              width: width,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.straighten_rounded,
+                        size: 12,
+                        color: AppTheme.primaryColor,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        GeoUtils.formatDistance(distance),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.terrain_rounded,
+                        size: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        elevation != null
+                            ? '${elevation!.round()} m'
+                            : 'No elevation',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 class _MapButton extends StatelessWidget {
