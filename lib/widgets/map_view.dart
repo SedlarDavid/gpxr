@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -20,18 +21,95 @@ class MapView extends StatefulWidget {
   State<MapView> createState() => _MapViewState();
 }
 
+enum _MapLayer { standard, outdoor }
+
 class _MapViewState extends State<MapView> {
+  static const String _mapyApiKey =
+      String.fromEnvironment('MAPY_API_KEY');
+  static bool get _hasMapyKey => _mapyApiKey.isNotEmpty;
+
   final MapController _mapController = MapController();
   String? _draggingPointId;
   bool _isDraggingWaypoint = false;
   String? _lastFittedFileName;
   final ValueNotifier<Offset?> _hoverCursor = ValueNotifier(null);
+  late _MapLayer _layer;
+
+  // Cached projection of track points into screen space for hover hit-
+  // testing. Rebuilt only when the camera or the profile changes, not on
+  // every mouse move — critical for large (50km+) tracks where calling
+  // latLngToScreenPoint on every point every frame was making hover
+  // completely unresponsive.
+  Float64List? _screenXs;
+  Float64List? _screenYs;
+  ElevationProfile? _screenCacheProfile;
+  double? _screenCacheZoom;
+  LatLng? _screenCacheCenter;
+  double? _screenCacheRotation;
+
+  @override
+  void initState() {
+    super.initState();
+    _layer = _hasMapyKey ? _MapLayer.outdoor : _MapLayer.standard;
+  }
 
   @override
   void dispose() {
     _hoverCursor.dispose();
     _mapController.dispose();
     super.dispose();
+  }
+
+  String get _tileUrlTemplate {
+    switch (_layer) {
+      case _MapLayer.standard:
+        return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+      case _MapLayer.outdoor:
+        return 'https://api.mapy.com/v1/maptiles/outdoor/256/{z}/{x}/{y}?apikey=$_mapyApiKey';
+    }
+  }
+
+  String get _attributionText {
+    switch (_layer) {
+      case _MapLayer.standard:
+        return '© OpenStreetMap contributors';
+      case _MapLayer.outdoor:
+        return '© Seznam.cz, a.s. • Mapy.com';
+    }
+  }
+
+  void _invalidateScreenCache() {
+    _screenXs = null;
+    _screenYs = null;
+    _screenCacheProfile = null;
+    _screenCacheZoom = null;
+    _screenCacheCenter = null;
+    _screenCacheRotation = null;
+  }
+
+  void _ensureScreenCache(ElevationProfile profile) {
+    final camera = _mapController.camera;
+    final cacheValid = _screenXs != null &&
+        identical(_screenCacheProfile, profile) &&
+        _screenCacheZoom == camera.zoom &&
+        _screenCacheCenter == camera.center &&
+        _screenCacheRotation == camera.rotation;
+    if (cacheValid) return;
+
+    final n = profile.length;
+    final xs = Float64List(n);
+    final ys = Float64List(n);
+    for (int i = 0; i < n; i++) {
+      final p = camera.latLngToScreenPoint(profile.points[i].latLng);
+      xs[i] = p.x.toDouble();
+      ys[i] = p.y.toDouble();
+    }
+    _screenXs = xs;
+    _screenYs = ys;
+    _screenCacheProfile = profile;
+    _screenCacheZoom = camera.zoom;
+    _screenCacheCenter = camera.center;
+    _screenCacheRotation = camera.rotation;
   }
 
   void _updateHoverFromCursor(
@@ -47,35 +125,48 @@ class _MapViewState extends State<MapView> {
       return;
     }
 
-    final camera = _mapController.camera;
-    // Project each profile point to screen space once.
-    final screen = List<math.Point<double>>.generate(
-      profile.length,
-      (i) => camera.latLngToScreenPoint(profile.points[i].latLng),
-      growable: false,
-    );
+    _ensureScreenCache(profile);
+    final xs = _screenXs!;
+    final ys = _screenYs!;
+
+    const threshold = 24.0;
+    const thresholdSq = threshold * threshold;
+    final cx = local.dx;
+    final cy = local.dy;
 
     double bestSq = double.infinity;
     int bestSeg = 0;
     double bestT = 0;
-    for (int i = 0; i < screen.length - 1; i++) {
-      final a = screen[i];
-      final b = screen[i + 1];
-      final dx = b.x - a.x;
-      final dy = b.y - a.y;
+    final last = xs.length - 1;
+    for (int i = 0; i < last; i++) {
+      final ax = xs[i];
+      final ay = ys[i];
+      final bx = xs[i + 1];
+      final by = ys[i + 1];
+      // Cheap axis-aligned bounding box reject so off-screen / far
+      // segments never touch the projection math.
+      final minX = ax < bx ? ax : bx;
+      final maxX = ax < bx ? bx : ax;
+      if (cx < minX - threshold || cx > maxX + threshold) continue;
+      final minY = ay < by ? ay : by;
+      final maxY = ay < by ? by : ay;
+      if (cy < minY - threshold || cy > maxY + threshold) continue;
+
+      final dx = bx - ax;
+      final dy = by - ay;
       final lenSq = dx * dx + dy * dy;
       double t;
       if (lenSq == 0) {
         t = 0;
       } else {
-        t = ((local.dx - a.x) * dx + (local.dy - a.y) * dy) / lenSq;
+        t = ((cx - ax) * dx + (cy - ay) * dy) / lenSq;
         if (t < 0) t = 0;
         if (t > 1) t = 1;
       }
-      final px = a.x + t * dx;
-      final py = a.y + t * dy;
-      final ddx = px - local.dx;
-      final ddy = py - local.dy;
+      final px = ax + t * dx;
+      final py = ay + t * dy;
+      final ddx = px - cx;
+      final ddy = py - cy;
       final sq = ddx * ddx + ddy * ddy;
       if (sq < bestSq) {
         bestSq = sq;
@@ -84,8 +175,7 @@ class _MapViewState extends State<MapView> {
       }
     }
 
-    const threshold = 24.0;
-    if (bestSq > threshold * threshold) {
+    if (bestSq > thresholdSq) {
       _hoverCursor.value = null;
       if (provider.hoverDistance.value != null) {
         provider.hoverDistance.value = null;
@@ -279,7 +369,10 @@ class _MapViewState extends State<MapView> {
                       ? GeoUtils.fitZoom(allPoints)
                       : 5,
                   onTap: _handleMapTap,
-                  onPositionChanged: (_, _) => _clearHover(provider),
+                  onPositionChanged: (_, _) {
+                    _invalidateScreenCache();
+                    _clearHover(provider);
+                  },
                   interactionOptions: const InteractionOptions(
                     flags: InteractiveFlag.drag |
                         InteractiveFlag.flingAnimation |
@@ -291,7 +384,8 @@ class _MapViewState extends State<MapView> {
                 ),
                 children: [
                   TileLayer(
-                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    key: ValueKey(_layer),
+                    urlTemplate: _tileUrlTemplate,
                     userAgentPackageName: 'com.gpxr.app',
                     maxZoom: 19,
                     tileProvider: CancellableNetworkTileProvider(),
@@ -362,6 +456,30 @@ class _MapViewState extends State<MapView> {
                   );
                 },
               ),
+              // Attribution (bottom left)
+              Positioned(
+                left: 8,
+                bottom: 8,
+                child: IgnorePointer(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _attributionText,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
               // Map controls (bottom right)
               Positioned(
                 right: 12,
@@ -370,6 +488,12 @@ class _MapViewState extends State<MapView> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
+                    _LayerMenuButton(
+                      current: _layer,
+                      mapyEnabled: _hasMapyKey,
+                      onChanged: (v) => setState(() => _layer = v),
+                    ),
+                    const SizedBox(height: 8),
                     if (data != null && allPoints.isNotEmpty) ...[
                       _MapButton(
                         icon: Icons.fit_screen_rounded,
@@ -762,6 +886,60 @@ class _TrianglePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _LayerMenuButton extends StatelessWidget {
+  const _LayerMenuButton({
+    required this.current,
+    required this.mapyEnabled,
+    required this.onChanged,
+  });
+
+  final _MapLayer current;
+  final bool mapyEnabled;
+  final ValueChanged<_MapLayer> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(8),
+      elevation: 2,
+      child: SizedBox(
+        width: 36,
+        height: 36,
+        child: PopupMenuButton<_MapLayer>(
+          tooltip: 'Map style',
+          padding: EdgeInsets.zero,
+          position: PopupMenuPosition.under,
+          offset: const Offset(-160, 0),
+          icon: Icon(
+            Icons.layers_rounded,
+            size: 20,
+            color: AppTheme.textPrimary,
+          ),
+          onSelected: onChanged,
+          itemBuilder: (ctx) => [
+            CheckedPopupMenuItem<_MapLayer>(
+              value: _MapLayer.standard,
+              checked: current == _MapLayer.standard,
+              child: const Text('Standard (OSM)'),
+            ),
+            CheckedPopupMenuItem<_MapLayer>(
+              value: _MapLayer.outdoor,
+              checked: current == _MapLayer.outdoor,
+              enabled: mapyEnabled,
+              child: Text(
+                mapyEnabled
+                    ? 'Outdoor (Mapy.com)'
+                    : 'Outdoor (Mapy.com) — API key missing',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _EndpointBadge extends StatelessWidget {

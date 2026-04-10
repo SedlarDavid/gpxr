@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/gpx_provider.dart';
+import '../services/tracedetrail_importer.dart';
 import '../utils/theme.dart';
 
 class Toolbar extends StatelessWidget {
@@ -68,6 +69,15 @@ class Toolbar extends StatelessWidget {
                 icon: Icons.file_open_rounded,
                 label: 'Import',
                 onTap: () => _importFile(context, provider),
+              ),
+              const SizedBox(width: 4),
+              _ToolbarButton(
+                icon: Icons.public_rounded,
+                label: 'Import waypoints from Trace de Trail',
+                compact: true,
+                onTap: provider.hasData
+                    ? () => _importTraceDeTrailWaypoints(context, provider)
+                    : null,
               ),
               const SizedBox(width: 4),
               _ToolbarButton(
@@ -204,6 +214,105 @@ class Toolbar extends StatelessWidget {
     }
   }
 
+  Future<void> _importTraceDeTrailWaypoints(
+    BuildContext context,
+    GpxProvider provider,
+  ) async {
+    final urlController = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Import waypoints from Trace de Trail',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Trace de Trail's downloadable GPX doesn't include aid "
+                'stations or checkpoints. Paste the race page URL to pull '
+                'them in and snap them onto your track.',
+                style: TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: urlController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Race page URL',
+                  hintText: 'https://tracedetrail.fr/en/trace/302881',
+                ),
+                onSubmitted: (v) => Navigator.pop(ctx, v),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, urlController.text),
+            child: const Text('Import'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null || result.trim().isEmpty) return;
+    if (!context.mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Fetching waypoints…'),
+        duration: Duration(seconds: 8),
+      ),
+    );
+
+    try {
+      final importer = TraceDeTrailImporter();
+      final waypoints = await importer.fetchWaypoints(result);
+      if (waypoints.isEmpty) {
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(
+            content: Text('No waypoints found on that page'),
+            backgroundColor: Color(0xFFF59E0B),
+          ));
+        return;
+      }
+      final added = provider.importWaypoints(waypoints);
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text('Imported $added waypoint${added == 1 ? '' : 's'}'),
+          backgroundColor: const Color(0xFF22C55E),
+          duration: const Duration(seconds: 3),
+        ));
+    } on TraceDeTrailImportException catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text('Import failed: ${e.message}'),
+          backgroundColor: const Color(0xFFEF4444),
+        ));
+    } catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text('Import failed: $e'),
+          backgroundColor: const Color(0xFFEF4444),
+        ));
+    }
+  }
+
   void _exportFile(BuildContext context, GpxProvider provider) {
     try {
       final xml = provider.exportToString();
@@ -241,11 +350,13 @@ class _ToolbarButton extends StatelessWidget {
     required this.icon,
     required this.label,
     this.onTap,
+    this.compact = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -259,7 +370,10 @@ class _ToolbarButton extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(8),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 8 : 10,
+              vertical: 6,
+            ),
             child: Row(
               children: [
                 Icon(
@@ -267,15 +381,17 @@ class _ToolbarButton extends StatelessWidget {
                   size: 16,
                   color: enabled ? AppTheme.textPrimary : AppTheme.textSecondary.withValues(alpha: 0.4),
                 ),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: enabled ? AppTheme.textPrimary : AppTheme.textSecondary.withValues(alpha: 0.4),
+                if (!compact) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: enabled ? AppTheme.textPrimary : AppTheme.textSecondary.withValues(alpha: 0.4),
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),

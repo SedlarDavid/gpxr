@@ -14,28 +14,79 @@ class GeoUtils {
     return total;
   }
 
+  /// Minimum elevation change (meters) that counts as a real climb or
+  /// descent. Smaller deltas are treated as GPS noise and discarded. 5m is
+  /// roughly what Strava/Trace de Trail use for trail data — summing raw
+  /// deltas on a recorded GPX over-reports gain by 20–40%.
+  static const double _elevationNoiseThreshold = 5.0;
+
+  /// Total ascent over [points], ignoring sub-[_elevationNoiseThreshold]
+  /// wiggles via hysteresis: we track the most recent turning point and
+  /// only flip direction (and commit the pending gain/loss) once the
+  /// elevation has moved more than the threshold in the opposite
+  /// direction. This matches what trail-running platforms report.
   static double totalElevationGain(List<GpxTrackPoint> points) {
-    double gain = 0;
-    for (int i = 1; i < points.length; i++) {
-      final prev = points[i - 1].elevation;
-      final curr = points[i].elevation;
-      if (prev != null && curr != null && curr > prev) {
-        gain += curr - prev;
-      }
-    }
-    return gain;
+    return _hysteresisElevation(points, gain: true);
   }
 
   static double totalElevationLoss(List<GpxTrackPoint> points) {
-    double loss = 0;
-    for (int i = 1; i < points.length; i++) {
-      final prev = points[i - 1].elevation;
-      final curr = points[i].elevation;
-      if (prev != null && curr != null && curr < prev) {
-        loss += prev - curr;
+    return _hysteresisElevation(points, gain: false);
+  }
+
+  static double _hysteresisElevation(
+    List<GpxTrackPoint> points, {
+    required bool gain,
+  }) {
+    double total = 0;
+    double? refEle; // last committed turning point
+    double? extremeEle; // running max (when climbing) / min (when descending)
+    int direction = 0; // 1 climbing, -1 descending, 0 unknown
+    for (final p in points) {
+      final e = p.elevation;
+      if (e == null) continue;
+      if (refEle == null) {
+        refEle = e;
+        extremeEle = e;
+        continue;
+      }
+      if (direction == 1) {
+        if (e >= extremeEle!) {
+          extremeEle = e;
+        } else if (extremeEle - e >= _elevationNoiseThreshold) {
+          // Confirmed reversal: commit the climb, start tracking descent.
+          if (gain) total += extremeEle - refEle;
+          refEle = extremeEle;
+          extremeEle = e;
+          direction = -1;
+        }
+      } else if (direction == -1) {
+        if (e <= extremeEle!) {
+          extremeEle = e;
+        } else if (e - extremeEle >= _elevationNoiseThreshold) {
+          if (!gain) total += refEle - extremeEle;
+          refEle = extremeEle;
+          extremeEle = e;
+          direction = 1;
+        }
+      } else {
+        // Direction not yet established — wait until we move more than
+        // the threshold away from the starting reference.
+        if (e - refEle >= _elevationNoiseThreshold) {
+          direction = 1;
+          extremeEle = e;
+        } else if (refEle - e >= _elevationNoiseThreshold) {
+          direction = -1;
+          extremeEle = e;
+        }
       }
     }
-    return loss;
+    // Commit the trailing leg so a track that ends mid-climb still counts.
+    if (direction == 1 && extremeEle != null && refEle != null) {
+      if (gain && extremeEle > refEle) total += extremeEle - refEle;
+    } else if (direction == -1 && extremeEle != null && refEle != null) {
+      if (!gain && extremeEle < refEle) total += refEle - extremeEle;
+    }
+    return total;
   }
 
   static LatLng center(List<LatLng> points) {

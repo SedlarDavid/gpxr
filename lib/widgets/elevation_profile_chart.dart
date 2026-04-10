@@ -3,16 +3,37 @@ import '../utils/elevation_profile.dart';
 import '../utils/geo_utils.dart';
 import '../utils/theme.dart';
 
+/// Single waypoint marker rendered on the elevation profile chart.
+class WaypointTick {
+  const WaypointTick({
+    required this.distance,
+    required this.color,
+    this.offTrack = false,
+  });
+
+  /// Cumulative distance (meters) along the track.
+  final double distance;
+  final Color color;
+  /// Renders as a hollow, dashed-style marker so users can tell off-track
+  /// waypoints (e.g. a landmark placed beside the trail) from snapped ones.
+  final bool offTrack;
+}
+
 class ElevationProfileChart extends StatelessWidget {
   const ElevationProfileChart({
     super.key,
     required this.profile,
     required this.hoverDistance,
+    this.waypointTicks = const [],
     this.height = 96,
   });
 
   final ElevationProfile profile;
   final ValueNotifier<double?> hoverDistance;
+  /// Ticks drawn along the baseline at each waypoint's cumulative distance,
+  /// so the user can see at-a-glance where aid stations, peaks, etc. fall
+  /// along the elevation profile.
+  final List<WaypointTick> waypointTicks;
   final double height;
 
   static const double _padH = 8;
@@ -67,6 +88,7 @@ class ElevationProfileChart extends StatelessWidget {
                     painter: _ElevationPainter(
                       profile: profile,
                       hoverDistance: hoverD,
+                      waypointTicks: waypointTicks,
                       padH: _padH,
                       padTop: _padTop,
                       padBottom: _padBottom,
@@ -87,6 +109,7 @@ class _ElevationPainter extends CustomPainter {
   _ElevationPainter({
     required this.profile,
     required this.hoverDistance,
+    required this.waypointTicks,
     required this.padH,
     required this.padTop,
     required this.padBottom,
@@ -94,6 +117,7 @@ class _ElevationPainter extends CustomPainter {
 
   final ElevationProfile profile;
   final double? hoverDistance;
+  final List<WaypointTick> waypointTicks;
   final double padH;
   final double padTop;
   final double padBottom;
@@ -198,6 +222,39 @@ class _ElevationPainter extends CustomPainter {
       Alignment.topRight,
     );
 
+    // Waypoint ticks along the baseline.
+    for (final tick in waypointTicks) {
+      if (tick.distance < 0 || tick.distance > totalD) continue;
+      final tx = xFor(tick.distance);
+      final topY = padTop + 2;
+      final botY = baselineY;
+      final tickPaint = Paint()
+        ..color = tick.color.withValues(alpha: 0.45)
+        ..strokeWidth = 1;
+      canvas.drawLine(Offset(tx, topY), Offset(tx, botY), tickPaint);
+      // Marker at the baseline: filled circle for on-track, hollow for off.
+      if (tick.offTrack) {
+        canvas.drawCircle(
+          Offset(tx, botY),
+          3,
+          Paint()
+            ..color = tick.color
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.4,
+        );
+      } else {
+        canvas.drawCircle(Offset(tx, botY), 3, Paint()..color = tick.color);
+        canvas.drawCircle(
+          Offset(tx, botY),
+          3,
+          Paint()
+            ..color = Colors.white
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1,
+        );
+      }
+    }
+
     // Hover indicator.
     if (hoverDistance != null) {
       final sample = profile.sampleAtDistance(hoverDistance!);
@@ -277,6 +334,20 @@ class _ElevationPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _ElevationPainter oldDelegate) {
     return oldDelegate.profile != profile ||
-        oldDelegate.hoverDistance != hoverDistance;
+        oldDelegate.hoverDistance != hoverDistance ||
+        !_ticksEqual(oldDelegate.waypointTicks, waypointTicks);
+  }
+
+  static bool _ticksEqual(List<WaypointTick> a, List<WaypointTick> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i].distance != b[i].distance ||
+          a[i].color != b[i].color ||
+          a[i].offTrack != b[i].offTrack) {
+        return false;
+      }
+    }
+    return true;
   }
 }

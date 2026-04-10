@@ -4,28 +4,107 @@ import 'package:uuid/uuid.dart';
 const _uuid = Uuid();
 
 enum WaypointType {
-  generic('Generic', 'Flag'),
-  aidStation('Aid Station', 'Aid'),
-  water('Water', 'Water'),
-  food('Food', 'Food'),
-  summit('Summit', 'Summit'),
-  camp('Camp', 'Camp'),
-  parking('Parking', 'Parking'),
-  danger('Danger', 'Danger'),
-  info('Info', 'Info'),
-  start('Start', 'Start'),
-  finish('Finish', 'Finish');
+  generic(
+    'Generic',
+    sym: 'Flag, Blue',
+    gpxType: 'Waypoint',
+    aliases: ['Flag', 'Waypoint', 'Generic', 'Pin, Blue'],
+  ),
+  aidStation(
+    'Aid Station',
+    sym: 'First Aid',
+    gpxType: 'Aid Station',
+    aliases: ['Aid', 'First Aid Kit', 'Aid Station'],
+  ),
+  water(
+    'Water',
+    sym: 'Water Source',
+    gpxType: 'Water',
+    aliases: ['Water', 'Drinking Water'],
+  ),
+  food(
+    'Food',
+    sym: 'Restaurant',
+    gpxType: 'Food',
+    aliases: ['Food', 'Food Source', 'Fast Food'],
+  ),
+  summit(
+    'Summit',
+    sym: 'Summit',
+    gpxType: 'Summit',
+    aliases: ['Peak', 'Mountain'],
+  ),
+  camp(
+    'Camp',
+    sym: 'Campground',
+    gpxType: 'Camp',
+    aliases: ['Camp', 'Campsite', 'Tent'],
+  ),
+  parking(
+    'Parking',
+    sym: 'Parking Area',
+    gpxType: 'Parking',
+    aliases: ['Parking'],
+  ),
+  danger(
+    'Danger',
+    sym: 'Skull and Crossbones',
+    gpxType: 'Danger',
+    aliases: ['Danger', 'Danger Area', 'Warning'],
+  ),
+  info(
+    'Info',
+    sym: 'Information',
+    gpxType: 'Information',
+    aliases: ['Info', 'Information'],
+  ),
+  start(
+    'Start',
+    sym: 'Flag, Green',
+    gpxType: 'Start',
+    aliases: ['Start', 'Begin', 'Navaid, Green'],
+  ),
+  finish(
+    'Finish',
+    sym: 'Flag, Red',
+    gpxType: 'Finish',
+    aliases: ['Finish', 'End', 'Navaid, Red'],
+  );
 
-  const WaypointType(this.label, this.sym);
+  const WaypointType(
+    this.label, {
+    required this.sym,
+    required this.gpxType,
+    this.aliases = const [],
+  });
+
   final String label;
+
+  /// Canonical Garmin `<sym>` name written into exported GPX so firmware
+  /// and Garmin Connect can map the waypoint to the correct course-point
+  /// icon when the track is converted to a FIT course file.
   final String sym;
+
+  /// Value written into the optional `<type>` element, picked up by some
+  /// tools as a secondary classification hint.
+  final String gpxType;
+
+  /// Legacy/alternate names we still accept when parsing existing GPX
+  /// files so round-tripping older exports keeps the right type.
+  final List<String> aliases;
 
   static WaypointType fromSym(String? sym) {
     if (sym == null) return WaypointType.generic;
-    final lower = sym.toLowerCase();
+    final lower = sym.toLowerCase().trim();
+    if (lower.isEmpty) return WaypointType.generic;
     for (final type in WaypointType.values) {
-      if (type.sym.toLowerCase() == lower || type.label.toLowerCase() == lower) {
+      if (type.sym.toLowerCase() == lower ||
+          type.label.toLowerCase() == lower ||
+          type.gpxType.toLowerCase() == lower) {
         return type;
+      }
+      for (final alias in type.aliases) {
+        if (alias.toLowerCase() == lower) return type;
       }
     }
     return WaypointType.generic;

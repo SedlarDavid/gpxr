@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/gpx_models.dart';
 import '../services/gpx_parser.dart';
+import '../utils/elevation_profile.dart';
 
 enum EditMode { view, addPoint, addWaypoint, deletePoint }
 
@@ -34,7 +35,25 @@ class GpxProvider extends ChangeNotifier {
   /// hover updates don't rebuild the whole widget tree.
   final ValueNotifier<double?> hoverDistance = ValueNotifier(null);
 
+  /// Maximum distance (meters) within which a clicked or existing waypoint
+  /// is automatically pulled onto the nearest point of the track. Matches
+  /// what Garmin Connect typically tolerates when promoting GPX waypoints
+  /// to FIT course points on the watch.
+  static const double snapTolerance = 120;
+
   bool get hasData => _data != null;
+
+  /// Ordered list of every track point across all tracks/segments, used
+  /// for profile and snap computations.
+  List<GpxTrackPoint> get _allTrackPoints =>
+      _data?.tracks.expand((t) => t.allPoints).toList() ??
+      const <GpxTrackPoint>[];
+
+  /// Fresh [ElevationProfile] for the current track. Cheap enough to
+  /// rebuild per call; callers that need to sample it repeatedly in a
+  /// single operation should cache locally.
+  ElevationProfile elevationProfile() =>
+      ElevationProfile.fromPoints(_allTrackPoints);
 
   @override
   void dispose() {
@@ -160,13 +179,89 @@ class GpxProvider extends ChangeNotifier {
   // Waypoint operations
   void addWaypoint(LatLng latLng, {String? name, WaypointType? type}) {
     if (_data == null) return;
+    // Snap to nearest point on the track when the click lands within the
+    // snap tolerance so the resulting GPX can be promoted to Garmin course
+    // points on export. Also lift elevation from the track.
+    final profile = elevationProfile();
+    final nearest = profile.nearestOnTrack(latLng);
+    LatLng resolved = latLng;
+    double? elevation;
+    if (nearest != null && nearest.distanceToLineMeters <= snapTolerance) {
+      resolved = nearest.latLng;
+      elevation = profile.sampleAtDistance(nearest.distance).elevation;
+    }
     final wpt = GpxWaypoint(
-      latLng: latLng,
+      latLng: resolved,
+      elevation: elevation,
       name: name ?? '${(type ?? _selectedWaypointType).label} ${_data!.waypoints.length + 1}',
       type: type ?? _selectedWaypointType,
     );
     _data!.waypoints.add(wpt);
     notifyListeners();
+  }
+
+  /// Merges [waypoints] (typically scraped from a race page) into the
+  /// current GPX, snapping each one onto the track when it's within
+  /// [snapTolerance]. Waypoints further than the tolerance are kept where
+  /// they are so the user can still see them on the map and review them.
+  ///
+  /// Returns the number of waypoints that were actually imported.
+  int importWaypoints(List<GpxWaypoint> waypoints) {
+    if (_data == null) return 0;
+    final profile = elevationProfile();
+    int added = 0;
+    for (final incoming in waypoints) {
+      var wpt = incoming;
+      if (!profile.isEmpty) {
+        final nearest = profile.nearestOnTrack(incoming.latLng);
+        if (nearest != null && nearest.distanceToLineMeters <= snapTolerance) {
+          final sample = profile.sampleAtDistance(nearest.distance);
+          wpt = incoming.copyWith(
+            latLng: nearest.latLng,
+            elevation: incoming.elevation ?? sample.elevation,
+          );
+        }
+      }
+      _data!.waypoints.add(wpt);
+      added++;
+    }
+    if (added > 0) notifyListeners();
+    return added;
+  }
+
+  /// Pulls an existing waypoint onto the closest point of the track,
+  /// regardless of snap tolerance. Used by the sidebar "snap" action for
+  /// waypoints that were placed off-track and need to be turned into
+  /// course points.
+  void snapWaypointToTrack(String id) {
+    if (_data == null) return;
+    final idx = _data!.waypoints.indexWhere((w) => w.id == id);
+    if (idx == -1) return;
+    final profile = elevationProfile();
+    final nearest = profile.nearestOnTrack(_data!.waypoints[idx].latLng);
+    if (nearest == null) return;
+    final sample = profile.sampleAtDistance(nearest.distance);
+    _data!.waypoints[idx] = _data!.waypoints[idx].copyWith(
+      latLng: nearest.latLng,
+      elevation: sample.elevation,
+    );
+    notifyListeners();
+  }
+
+  /// Projects [wpt] onto the current track and returns the cumulative
+  /// distance (meters) and perpendicular offset, or null if there is no
+  /// track to project onto. Used by the sidebar and elevation chart to
+  /// show "km from start" / off-track warnings.
+  WaypointTrackInfo? waypointTrackInfo(GpxWaypoint wpt) {
+    final profile = elevationProfile();
+    if (profile.isEmpty) return null;
+    final nearest = profile.nearestOnTrack(wpt.latLng);
+    if (nearest == null) return null;
+    return WaypointTrackInfo(
+      distance: nearest.distance,
+      offsetMeters: nearest.distanceToLineMeters,
+      onTrack: nearest.distanceToLineMeters <= snapTolerance,
+    );
   }
 
   void removeWaypoint(String id) {
@@ -269,4 +364,22 @@ class GpxProvider extends ChangeNotifier {
 
     addTrackPoint(latLng, index: bestIndex);
   }
+}
+
+/// Result of projecting a waypoint onto the current track.
+class WaypointTrackInfo {
+  WaypointTrackInfo({
+    required this.distance,
+    required this.offsetMeters,
+    required this.onTrack,
+  });
+
+  /// Cumulative distance along the track (meters) at the projection.
+  final double distance;
+
+  /// Perpendicular distance (meters) from the waypoint to the track.
+  final double offsetMeters;
+
+  /// Whether [offsetMeters] is within [GpxProvider.snapTolerance].
+  final bool onTrack;
 }

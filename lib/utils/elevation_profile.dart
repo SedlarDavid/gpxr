@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:latlong2/latlong.dart';
 import '../models/gpx_models.dart';
 import 'geo_utils.dart';
@@ -90,6 +92,83 @@ class ElevationProfile {
     return lo;
   }
 
+  /// Projects [p] onto the closest segment of the polyline and returns the
+  /// snapped position, its cumulative distance along the profile, and the
+  /// perpendicular distance (in meters) from [p] to the line.
+  ///
+  /// Uses a local equirectangular approximation anchored at [p]'s latitude
+  /// so the projection math is done in a metric plane — accurate enough for
+  /// snap tolerances up to several kilometers.
+  NearestOnTrack? nearestOnTrack(LatLng p) {
+    if (points.isEmpty) return null;
+    if (points.length == 1) {
+      return NearestOnTrack(
+        distance: 0,
+        latLng: points.first.latLng,
+        distanceToLineMeters: GeoUtils.distanceBetween(p, points.first.latLng),
+        segmentIndex: 0,
+        t: 0,
+      );
+    }
+
+    final latRad = p.latitude * pi / 180;
+    final mPerDegLat = 111320.0;
+    final mPerDegLng = 111320.0 * cos(latRad);
+
+    double bestSq = double.infinity;
+    int bestSeg = 0;
+    double bestT = 0;
+    double bestPx = 0;
+    double bestPy = 0;
+
+    double projX(double lng) => (lng - p.longitude) * mPerDegLng;
+    double projY(double lat) => (lat - p.latitude) * mPerDegLat;
+
+    for (int i = 0; i < points.length - 1; i++) {
+      final ax = projX(points[i].latLng.longitude);
+      final ay = projY(points[i].latLng.latitude);
+      final bx = projX(points[i + 1].latLng.longitude);
+      final by = projY(points[i + 1].latLng.latitude);
+      final dx = bx - ax;
+      final dy = by - ay;
+      final lenSq = dx * dx + dy * dy;
+      double t;
+      if (lenSq == 0) {
+        t = 0;
+      } else {
+        // Projection of the origin (p itself) onto the segment a→b.
+        t = -(ax * dx + ay * dy) / lenSq;
+        if (t < 0) t = 0;
+        if (t > 1) t = 1;
+      }
+      final px = ax + t * dx;
+      final py = ay + t * dy;
+      final sq = px * px + py * py;
+      if (sq < bestSq) {
+        bestSq = sq;
+        bestSeg = i;
+        bestT = t;
+        bestPx = px;
+        bestPy = py;
+      }
+    }
+
+    final cumA = distances[bestSeg];
+    final cumB = distances[bestSeg + 1];
+    final cumD = cumA + bestT * (cumB - cumA);
+
+    final snapLat = p.latitude + bestPy / mPerDegLat;
+    final snapLng = p.longitude + bestPx / mPerDegLng;
+
+    return NearestOnTrack(
+      distance: cumD,
+      latLng: LatLng(snapLat, snapLng),
+      distanceToLineMeters: sqrt(bestSq),
+      segmentIndex: bestSeg,
+      t: bestT,
+    );
+  }
+
   /// Interpolated sample at the given cumulative distance in meters.
   ProfileSample sampleAtDistance(double d) {
     if (points.isEmpty) {
@@ -143,4 +222,29 @@ class ProfileSample {
   final double distance;
   final LatLng latLng;
   final double? elevation;
+}
+
+class NearestOnTrack {
+  NearestOnTrack({
+    required this.distance,
+    required this.latLng,
+    required this.distanceToLineMeters,
+    required this.segmentIndex,
+    required this.t,
+  });
+
+  /// Cumulative distance along the track of the projected point (meters).
+  final double distance;
+
+  /// Snapped position on the track polyline.
+  final LatLng latLng;
+
+  /// Perpendicular distance (meters) from the original point to the track.
+  final double distanceToLineMeters;
+
+  /// Index of the segment (point i → point i+1) the projection landed on.
+  final int segmentIndex;
+
+  /// Interpolation parameter along that segment in the range [0, 1].
+  final double t;
 }

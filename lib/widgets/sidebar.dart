@@ -152,6 +152,19 @@ class _RouteStats extends StatelessWidget {
         final distance = GeoUtils.totalDistance(routeLatLngs);
         final gain = GeoUtils.totalElevationGain(trackPoints);
         final loss = GeoUtils.totalElevationLoss(trackPoints);
+        final profile = ElevationProfile.fromPoints(trackPoints);
+        final ticks = <WaypointTick>[];
+        if (!profile.isEmpty) {
+          for (final wpt in data.waypoints) {
+            final nearest = profile.nearestOnTrack(wpt.latLng);
+            if (nearest == null) continue;
+            ticks.add(WaypointTick(
+              distance: nearest.distance,
+              color: WaypointIcons.colorFor(wpt.type),
+              offTrack: nearest.distanceToLineMeters > GpxProvider.snapTolerance,
+            ));
+          }
+        }
 
         return Padding(
           padding: const EdgeInsets.all(16),
@@ -222,8 +235,9 @@ class _RouteStats extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               ElevationProfileChart(
-                profile: ElevationProfile.fromPoints(trackPoints),
+                profile: profile,
                 hoverDistance: provider.hoverDistance,
+                waypointTicks: ticks,
               ),
             ],
           ),
@@ -535,6 +549,7 @@ class _WaypointsList extends StatelessWidget {
           );
         }
 
+        final profile = provider.elevationProfile();
         return ReorderableListView.builder(
           padding: const EdgeInsets.symmetric(vertical: 4),
           itemCount: waypoints.length,
@@ -560,13 +575,23 @@ class _WaypointsList extends StatelessWidget {
           itemBuilder: (context, index) {
             final wpt = waypoints[index];
             final isSelected = wpt.id == provider.selectedPointId;
+            final nearest = profile.isEmpty ? null : profile.nearestOnTrack(wpt.latLng);
+            final onTrack = nearest != null &&
+                nearest.distanceToLineMeters <= GpxProvider.snapTolerance;
             return _WaypointTile(
               key: ValueKey(wpt.id),
               waypoint: wpt,
               isSelected: isSelected,
+              cumulativeDistance: nearest?.distance,
+              offTrackMeters: (nearest != null && !onTrack)
+                  ? nearest.distanceToLineMeters
+                  : null,
               onTap: () => provider.selectPoint(wpt.id),
               onDelete: () => provider.removeWaypoint(wpt.id),
               onEdit: () => _editWaypoint(context, provider, wpt),
+              onSnap: (nearest != null && !onTrack)
+                  ? () => provider.snapWaypointToTrack(wpt.id)
+                  : null,
             );
           },
         );
@@ -666,6 +691,9 @@ class _WaypointTile extends StatelessWidget {
     required this.onTap,
     required this.onDelete,
     required this.onEdit,
+    this.cumulativeDistance,
+    this.offTrackMeters,
+    this.onSnap,
   });
 
   final GpxWaypoint waypoint;
@@ -674,10 +702,59 @@ class _WaypointTile extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onEdit;
 
+  /// Cumulative distance along the track (meters) where this waypoint
+  /// projects. Null when there is no track to project onto.
+  final double? cumulativeDistance;
+
+  /// If the waypoint is farther from the track than the snap tolerance,
+  /// the perpendicular distance (meters). Null when it's on-track.
+  final double? offTrackMeters;
+
+  /// Called when the user taps the "snap to track" action. Only provided
+  /// when the waypoint is currently off-track.
+  final VoidCallback? onSnap;
+
   @override
   Widget build(BuildContext context) {
     final color = WaypointIcons.colorFor(waypoint.type);
     final icon = WaypointIcons.iconFor(waypoint.type);
+
+    final detailWidgets = <Widget>[
+      Text(
+        waypoint.type.label,
+        style: TextStyle(
+          fontSize: 11,
+          color: color,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    ];
+    if (cumulativeDistance != null) {
+      detailWidgets
+        ..add(Text(' · ', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)))
+        ..add(Text(
+          '@ ${GeoUtils.formatDistance(cumulativeDistance!)}',
+          style: TextStyle(
+            fontSize: 11,
+            color: AppTheme.textSecondary,
+            fontWeight: FontWeight.w500,
+          ),
+        ));
+    }
+    if (offTrackMeters != null) {
+      detailWidgets
+        ..add(const SizedBox(width: 4))
+        ..add(Icon(Icons.warning_amber_rounded, size: 12, color: const Color(0xFFF59E0B)))
+        ..add(const SizedBox(width: 2))
+        ..add(Text(
+          '${offTrackMeters!.round()}m off',
+          style: const TextStyle(
+            fontSize: 11,
+            color: Color(0xFFB45309),
+            fontWeight: FontWeight.w500,
+          ),
+        ));
+    }
 
     return InkWell(
       onTap: onTap,
@@ -716,17 +793,19 @@ class _WaypointTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  Text(
-                    waypoint.type.label,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: color,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+                  Row(children: detailWidgets),
                 ],
               ),
             ),
+            if (onSnap != null)
+              IconButton(
+                icon: const Icon(Icons.near_me_rounded, size: 14),
+                onPressed: onSnap,
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                tooltip: 'Snap to track',
+              ),
             IconButton(
               icon: const Icon(Icons.edit_rounded, size: 14),
               onPressed: onEdit,

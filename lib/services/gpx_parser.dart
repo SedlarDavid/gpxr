@@ -104,14 +104,21 @@ class GpxParser {
     final name = _textOf(el, 'name');
     final desc = _textOf(el, 'desc');
     final sym = _textOf(el, 'sym');
+    final type = _textOf(el, 'type');
     final timeStr = _textOf(el, 'time');
+
+    // Prefer <sym> (Garmin icon) and fall back to <type> (classification).
+    WaypointType resolved = WaypointType.fromSym(sym);
+    if (resolved == WaypointType.generic && type != null) {
+      resolved = WaypointType.fromSym(type);
+    }
 
     return GpxWaypoint(
       latLng: LatLng(lat, lon),
       elevation: ele,
       name: name,
       description: desc,
-      type: WaypointType.fromSym(sym),
+      type: resolved,
       time: timeStr != null ? DateTime.tryParse(timeStr) : null,
     );
   }
@@ -171,7 +178,10 @@ class GpxParser {
       if (wpt.description != null) {
         builder.element('desc', nest: wpt.description);
       }
+      // Order matters in the GPX 1.1 schema: sym and type come after
+      // name/cmt/desc/src/link.
       builder.element('sym', nest: wpt.type.sym);
+      builder.element('type', nest: wpt.type.gpxType);
     });
   }
 
