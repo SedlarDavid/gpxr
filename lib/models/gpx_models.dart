@@ -228,6 +228,7 @@ class GpxData {
     this.name,
     this.description,
     this.author,
+    this.sourceUrl,
     List<GpxWaypoint>? waypoints,
     List<GpxTrack>? tracks,
     List<GpxRoute>? routes,
@@ -238,6 +239,12 @@ class GpxData {
   final String? name;
   final String? description;
   final String? author;
+
+  /// First `<link href="...">` found in the GPX. Used to detect files
+  /// exported from sources we can enrich (e.g. tracedetrail.fr race
+  /// pages, which ship the track but not the waypoints).
+  final String? sourceUrl;
+
   final List<GpxWaypoint> waypoints;
   final List<GpxTrack> tracks;
   final List<GpxRoute> routes;
@@ -259,6 +266,7 @@ class GpxData {
     String? name,
     String? description,
     String? author,
+    String? sourceUrl,
     List<GpxWaypoint>? waypoints,
     List<GpxTrack>? tracks,
     List<GpxRoute>? routes,
@@ -267,6 +275,7 @@ class GpxData {
       name: name ?? this.name,
       description: description ?? this.description,
       author: author ?? this.author,
+      sourceUrl: sourceUrl ?? this.sourceUrl,
       waypoints: waypoints ?? this.waypoints,
       tracks: tracks ?? this.tracks,
       routes: routes ?? this.routes,

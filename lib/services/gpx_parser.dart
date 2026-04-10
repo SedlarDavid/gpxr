@@ -7,10 +7,22 @@ class GpxParser {
     final document = XmlDocument.parse(xmlString);
     final gpx = document.rootElement;
 
-    final name = _textOf(gpx, 'name');
-    final description = _textOf(gpx, 'desc');
-    final authorEl = gpx.getElement('author');
+    // In GPX 1.1 `<name>`, `<desc>`, `<author>`, `<link>` live under
+    // `<metadata>`; in GPX 1.0 they sit directly under `<gpx>`. Look in
+    // both places so we don't lose information either way.
+    final metadata = gpx.getElement('metadata');
+    final nameSource = metadata ?? gpx;
+
+    final name = _textOf(nameSource, 'name');
+    final description = _textOf(nameSource, 'desc');
+    final authorEl = nameSource.getElement('author');
     final author = authorEl != null ? _textOf(authorEl, 'name') : null;
+    // Pick the first `<link href="...">` we can find anywhere in the
+    // document — some exporters stash it under `<trk>` or at the root.
+    final sourceUrl = gpx
+        .findAllElements('link')
+        .map((el) => el.getAttribute('href'))
+        .firstWhere((h) => h != null && h.isNotEmpty, orElse: () => null);
 
     final waypoints = gpx
         .findElements('wpt')
@@ -31,6 +43,7 @@ class GpxParser {
       name: name,
       description: description,
       author: author,
+      sourceUrl: sourceUrl,
       waypoints: waypoints,
       tracks: tracks,
       routes: routes,

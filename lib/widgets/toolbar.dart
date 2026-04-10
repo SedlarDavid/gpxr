@@ -20,9 +20,7 @@ class Toolbar extends StatelessWidget {
           height: 56,
           decoration: BoxDecoration(
             color: Colors.white,
-            border: Border(
-              bottom: BorderSide(color: AppTheme.borderColor),
-            ),
+            border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
@@ -37,14 +35,15 @@ class Toolbar extends StatelessWidget {
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [
-                          AppTheme.primaryColor,
-                          AppTheme.trackColorAlt,
-                        ],
+                        colors: [AppTheme.primaryColor, AppTheme.trackColorAlt],
                       ),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.route_rounded, color: Colors.white, size: 18),
+                    child: const Icon(
+                      Icons.route_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   const Text(
@@ -74,7 +73,6 @@ class Toolbar extends StatelessWidget {
               _ToolbarButton(
                 icon: Icons.public_rounded,
                 label: 'Import waypoints from Trace de Trail',
-                compact: true,
                 onTap: provider.hasData
                     ? () => _importTraceDeTrailWaypoints(context, provider)
                     : null,
@@ -83,7 +81,9 @@ class Toolbar extends StatelessWidget {
               _ToolbarButton(
                 icon: Icons.download_rounded,
                 label: 'Export',
-                onTap: provider.hasData ? () => _exportFile(context, provider) : null,
+                onTap: provider.hasData
+                    ? () => _exportFile(context, provider)
+                    : null,
               ),
               const SizedBox(width: 16),
               Container(width: 1, height: 24, color: AppTheme.borderColor),
@@ -167,8 +167,13 @@ class Toolbar extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('New Route', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-        content: const Text('Create a new empty route? Unsaved changes will be lost.'),
+        title: const Text(
+          'New Route',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+        content: const Text(
+          'Create a new empty route? Unsaved changes will be lost.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -194,12 +199,34 @@ class Toolbar extends StatelessWidget {
         withData: true,
       );
 
-      if (result != null && result.files.isNotEmpty) {
-        final file = result.files.first;
-        final bytes = file.bytes;
-        if (bytes != null) {
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.first;
+      final bytes = file.bytes;
+      if (bytes == null) return;
+      if (!context.mounted) return;
+
+      // Parsing a 50 km+ GPX takes long enough on the web to feel frozen,
+      // so show a blocking loading dialog while we decode + parse. The
+      // Future.delayed yields one frame so the dialog actually paints
+      // before the synchronous parse starts.
+      await _runWithLoading(
+        context,
+        message: 'Parsing ${file.name}…',
+        task: () async {
+          await Future<void>.delayed(Duration.zero);
           final content = utf8.decode(bytes);
           provider.loadFromString(content, file.name);
+        },
+      );
+
+      // Detect sources we know how to enrich and offer an auto-import.
+      if (!context.mounted) return;
+      final sourceUrl = provider.data?.sourceUrl;
+      if (sourceUrl != null &&
+          TraceDeTrailImporter.extractTraceId(sourceUrl) != null) {
+        final accepted = await _askEnrichFromTraceDeTrail(context, sourceUrl);
+        if (accepted == true && context.mounted) {
+          await _fetchAndImportWaypoints(context, provider, sourceUrl);
         }
       }
     } catch (e) {
@@ -214,11 +241,67 @@ class Toolbar extends StatelessWidget {
     }
   }
 
+  /// Shown after a GPX file is loaded when we detect the source is a
+  /// Trace de Trail race page. Tells the user what's about to happen
+  /// and lets them opt out — returning false keeps the track as-is.
+  Future<bool?> _askEnrichFromTraceDeTrail(
+    BuildContext context,
+    String sourceUrl,
+  ) {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Trace de Trail detected',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "This GPX was exported from Trace de Trail, which strips "
+                "the waypoints (aid stations, medical points, checkpoints, "
+                "time controls…) when you download it. We can fetch them "
+                "straight from the race page and snap them onto your track.",
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 10),
+              SelectableText(
+                sourceUrl,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF6B7280),
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Skip'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Import waypoints'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _importTraceDeTrailWaypoints(
     BuildContext context,
     GpxProvider provider,
   ) async {
-    final urlController = TextEditingController();
+    final urlController = TextEditingController(
+      text: provider.data?.sourceUrl ?? '',
+    );
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -267,49 +350,82 @@ class Toolbar extends StatelessWidget {
 
     if (result == null || result.trim().isEmpty) return;
     if (!context.mounted) return;
+    await _fetchAndImportWaypoints(context, provider, result);
+  }
 
+  /// Shared fetch-and-merge pipeline used by both the manual URL dialog
+  /// and the auto-detection path triggered after a file import. Shows a
+  /// blocking loading dialog while the network call is in flight and
+  /// surfaces success / error as a snackbar once it's done.
+  Future<void> _fetchAndImportWaypoints(
+    BuildContext context,
+    GpxProvider provider,
+    String urlOrId,
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text('Fetching waypoints…'),
-        duration: Duration(seconds: 8),
-      ),
+    int? added;
+    Object? error;
+    await _runWithLoading(
+      context,
+      message: 'Fetching waypoints from Trace de Trail…',
+      task: () async {
+        try {
+          final importer = TraceDeTrailImporter();
+          final waypoints = await importer.fetchWaypoints(urlOrId);
+          added = provider.importWaypoints(waypoints);
+        } catch (e) {
+          error = e;
+        }
+      },
     );
 
+    if (error != null) {
+      final msg = error is TraceDeTrailImportException
+          ? (error as TraceDeTrailImportException).message
+          : error.toString();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Import failed: $msg'),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
+      return;
+    }
+    if (added == 0) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('No waypoints found on that page'),
+          backgroundColor: Color(0xFFF59E0B),
+        ),
+      );
+      return;
+    }
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Imported $added waypoint${added == 1 ? '' : 's'}'),
+        backgroundColor: const Color(0xFF22C55E),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  /// Shows a modal spinner while [task] runs and guarantees the dialog
+  /// is dismissed even if the task throws. The dialog is barrier-
+  /// dismissible-false so the user can't accidentally cancel mid-parse.
+  Future<void> _runWithLoading(
+    BuildContext context, {
+    required String message,
+    required Future<void> Function() task,
+  }) async {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _LoadingDialog(message: message),
+    );
     try {
-      final importer = TraceDeTrailImporter();
-      final waypoints = await importer.fetchWaypoints(result);
-      if (waypoints.isEmpty) {
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(const SnackBar(
-            content: Text('No waypoints found on that page'),
-            backgroundColor: Color(0xFFF59E0B),
-          ));
-        return;
-      }
-      final added = provider.importWaypoints(waypoints);
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(
-          content: Text('Imported $added waypoint${added == 1 ? '' : 's'}'),
-          backgroundColor: const Color(0xFF22C55E),
-          duration: const Duration(seconds: 3),
-        ));
-    } on TraceDeTrailImportException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(
-          content: Text('Import failed: ${e.message}'),
-          backgroundColor: const Color(0xFFEF4444),
-        ));
-    } catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(
-          content: Text('Import failed: $e'),
-          backgroundColor: const Color(0xFFEF4444),
-        ));
+      await task();
+    } finally {
+      if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
     }
   }
 
@@ -379,7 +495,9 @@ class _ToolbarButton extends StatelessWidget {
                 Icon(
                   icon,
                   size: 16,
-                  color: enabled ? AppTheme.textPrimary : AppTheme.textSecondary.withValues(alpha: 0.4),
+                  color: enabled
+                      ? AppTheme.textPrimary
+                      : AppTheme.textSecondary.withValues(alpha: 0.4),
                 ),
                 if (!compact) ...[
                   const SizedBox(width: 6),
@@ -388,7 +506,9 @@ class _ToolbarButton extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
-                      color: enabled ? AppTheme.textPrimary : AppTheme.textSecondary.withValues(alpha: 0.4),
+                      color: enabled
+                          ? AppTheme.textPrimary
+                          : AppTheme.textSecondary.withValues(alpha: 0.4),
                     ),
                   ),
                 ],
@@ -439,8 +559,8 @@ class _ToolbarToggle extends StatelessWidget {
                   color: !enabled
                       ? AppTheme.textSecondary.withValues(alpha: 0.4)
                       : isActive
-                          ? color
-                          : AppTheme.textSecondary,
+                      ? color
+                      : AppTheme.textSecondary,
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -451,13 +571,45 @@ class _ToolbarToggle extends StatelessWidget {
                     color: !enabled
                         ? AppTheme.textSecondary.withValues(alpha: 0.4)
                         : isActive
-                            ? color
-                            : AppTheme.textPrimary,
+                        ? color
+                        : AppTheme.textPrimary,
                   ),
                 ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadingDialog extends StatelessWidget {
+  const _LoadingDialog({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      content: SizedBox(
+        width: 280,
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -496,7 +648,9 @@ class _ToolbarCheck extends StatelessWidget {
                 Icon(
                   icon,
                   size: iconSize ?? 14,
-                  color: isChecked ? AppTheme.primaryColor : AppTheme.textSecondary.withValues(alpha: 0.4),
+                  color: isChecked
+                      ? AppTheme.primaryColor
+                      : AppTheme.textSecondary.withValues(alpha: 0.4),
                 ),
                 const SizedBox(width: 4),
                 Text(
@@ -504,7 +658,9 @@ class _ToolbarCheck extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: isChecked ? AppTheme.textPrimary : AppTheme.textSecondary.withValues(alpha: 0.6),
+                    color: isChecked
+                        ? AppTheme.textPrimary
+                        : AppTheme.textSecondary.withValues(alpha: 0.6),
                   ),
                 ),
               ],
