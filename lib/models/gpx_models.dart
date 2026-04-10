@@ -16,6 +16,12 @@ enum WaypointType {
     gpxType: 'Aid Station',
     aliases: ['Aid', 'First Aid Kit', 'Aid Station'],
   ),
+  medical(
+    'Medical',
+    sym: 'Medical Facility',
+    gpxType: 'Medical',
+    aliases: ['Medical', 'Hospital', 'Rescue', 'First Aid'],
+  ),
   water(
     'Water',
     sym: 'Water Source',

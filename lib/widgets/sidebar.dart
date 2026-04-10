@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/gpx_models.dart';
 import '../providers/gpx_provider.dart';
+import '../utils/climb_detector.dart';
 import '../utils/elevation_profile.dart';
 import '../utils/geo_utils.dart';
 import '../utils/theme.dart';
@@ -88,7 +89,7 @@ class _SidebarContentState extends State<_SidebarContent>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -117,10 +118,11 @@ class _SidebarContentState extends State<_SidebarContent>
             unselectedLabelColor: AppTheme.textSecondary,
             indicatorColor: AppTheme.primaryColor,
             indicatorSize: TabBarIndicatorSize.tab,
-            labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             tabs: const [
-              Tab(text: 'Track Points'),
+              Tab(text: 'Points'),
               Tab(text: 'Waypoints'),
+              Tab(text: 'Climbs'),
             ],
           ),
           const Divider(height: 1),
@@ -130,6 +132,7 @@ class _SidebarContentState extends State<_SidebarContent>
               children: const [
                 _TrackPointsList(),
                 _WaypointsList(),
+                _ClimbsList(),
               ],
             ),
           ),
@@ -821,6 +824,304 @@ class _WaypointTile extends StatelessWidget {
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
               tooltip: 'Remove waypoint',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ClimbsList extends StatelessWidget {
+  const _ClimbsList();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<GpxProvider>(
+      builder: (context, provider, _) {
+        final profile = provider.elevationProfile();
+        if (profile.isEmpty || !profile.hasElevation) {
+          return _ClimbsEmpty(
+            icon: Icons.landscape_rounded,
+            title: 'No elevation data',
+            subtitle: 'Import a GPX with elevation to see climb analysis.',
+          );
+        }
+        final climbs = ClimbDetector.detect(profile);
+        if (climbs.isEmpty) {
+          return _ClimbsEmpty(
+            icon: Icons.landscape_rounded,
+            title: 'No significant climbs',
+            subtitle:
+                'This track is relatively flat — climbs under 30 m gain or 300 m length are ignored.',
+          );
+        }
+        return ListView.separated(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          itemCount: climbs.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 2),
+          itemBuilder: (context, index) {
+            return _ClimbTile(
+              climb: climbs[index],
+              index: index,
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _ClimbsEmpty extends StatelessWidget {
+  const _ClimbsEmpty({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 32,
+                color: AppTheme.textSecondary.withValues(alpha: 0.4)),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ClimbTile extends StatelessWidget {
+  const _ClimbTile({required this.climb, required this.index});
+
+  final Climb climb;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    final avgPct = climb.averageGrade * 100;
+    final maxPct = climb.maxGrade * 100;
+    final gradeColor = _gradeColor(avgPct);
+    final categoryColor = _categoryColor(climb.category);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppTheme.borderColor.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: gradeColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Text(
+                  '${index + 1}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: gradeColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Climb ${index + 1}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      '${GeoUtils.formatDistance(climb.startDistance)} → '
+                      '${GeoUtils.formatDistance(climb.endDistance)}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: categoryColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  climb.category.label,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: categoryColor,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _ClimbStat(
+                icon: Icons.straighten_rounded,
+                label: GeoUtils.formatDistance(climb.length),
+                tooltip: 'Length',
+              ),
+              const SizedBox(width: 6),
+              _ClimbStat(
+                icon: Icons.trending_up_rounded,
+                label: '+${climb.gain.round()} m',
+                tooltip: 'Elevation gain',
+                color: const Color(0xFF22C55E),
+              ),
+              const SizedBox(width: 6),
+              _ClimbStat(
+                icon: Icons.show_chart_rounded,
+                label: '${avgPct.toStringAsFixed(1)}%',
+                tooltip: 'Average grade',
+                color: gradeColor,
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Icon(Icons.bolt_rounded, size: 12, color: AppTheme.textSecondary),
+              const SizedBox(width: 3),
+              Text(
+                'Max ${maxPct.toStringAsFixed(1)}%',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: _gradeColor(maxPct),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Icon(Icons.height_rounded, size: 12, color: AppTheme.textSecondary),
+              const SizedBox(width: 3),
+              Text(
+                '${climb.startElevation.round()} → ${climb.endElevation.round()} m',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppTheme.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Grade color matching what most cycling/running apps use: green up
+  /// to ~4%, yellow to 7%, orange to 10%, red to 15%, dark red beyond.
+  static Color _gradeColor(double pct) {
+    if (pct < 4) return const Color(0xFF22C55E);
+    if (pct < 7) return const Color(0xFFEAB308);
+    if (pct < 10) return const Color(0xFFF97316);
+    if (pct < 15) return const Color(0xFFEF4444);
+    return const Color(0xFF991B1B);
+  }
+
+  static Color _categoryColor(ClimbCategory c) {
+    switch (c) {
+      case ClimbCategory.cat4:
+        return const Color(0xFF64748B);
+      case ClimbCategory.cat3:
+        return const Color(0xFF0EA5E9);
+      case ClimbCategory.cat2:
+        return const Color(0xFF8B5CF6);
+      case ClimbCategory.cat1:
+        return const Color(0xFFF97316);
+      case ClimbCategory.hc:
+        return const Color(0xFFEF4444);
+    }
+  }
+}
+
+class _ClimbStat extends StatelessWidget {
+  const _ClimbStat({
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(5),
+          border: Border.all(
+            color: AppTheme.borderColor.withValues(alpha: 0.5),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: color ?? AppTheme.textSecondary),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textPrimary,
+              ),
             ),
           ],
         ),

@@ -68,8 +68,7 @@ class TraceDeTrailImporter {
     final waypoints = <GpxWaypoint>[];
     for (final entry in decoded) {
       if (entry is! Map) continue;
-      final wpt = _toWaypoint(entry.cast<String, dynamic>());
-      if (wpt != null) waypoints.add(wpt);
+      waypoints.addAll(_toWaypoints(entry.cast<String, dynamic>()));
     }
     return waypoints;
   }
@@ -168,34 +167,80 @@ class TraceDeTrailImporter {
     return null;
   }
 
-  GpxWaypoint? _toWaypoint(Map<String, dynamic> entry) {
+  /// Converts one `dataPi` entry into one or more [GpxWaypoint]s. A single
+  /// entry may emit up to three waypoints because Trace de Trail stacks
+  /// secondary icons (medical, time checkpoint, text annotation) on top
+  /// of the primary one via `type2` / `type3`. We keep them as separate
+  /// waypoints so they all show up in the sidebar and survive export.
+  List<GpxWaypoint> _toWaypoints(Map<String, dynamic> entry) {
     final abs = _asDouble(entry['abs']);
     final ord = _asDouble(entry['ord']);
-    if (abs == null || ord == null) return null;
+    if (abs == null || ord == null) return const [];
 
     final latLng = _mercatorToLatLng(abs, ord);
-    final label = (entry['labels'] as String?)?.trim();
-    final typeStr = (entry['type'] as String?)?.toLowerCase().trim() ?? '';
-    final wpType = _mapType(typeStr);
     final ele = _asDouble(entry['y']);
 
-    // Synthesize a name when the race page leaves it blank. Falling back
-    // to the type label matches what Trace de Trail shows on hover.
-    var name = label == null || label.isEmpty ? wpType.label : label;
-    // Time-of-day waypoints (`bh`) often have the planned ETA stashed in
-    // `bh`; include it in the description so runners see it on the watch.
+    // Pick the best available name. `infobulleTitre` holds the real
+    // place name on Trace de Trail; `passageLabel` and `labels` are
+    // older/alternate fields kept as fallbacks.
+    String? baseName = _firstNonEmpty([
+      entry['infobulleTitre'] as String?,
+      entry['passageLabel'] as String?,
+      entry['labels'] as String?,
+    ]);
+    // Build a description from the detailed text fields when present —
+    // these carry the aid station menu, course instructions, etc.
+    final description = _firstNonEmpty([
+      entry['infobulleText'] as String?,
+      entry['passageDescription'] as String?,
+      entry['passageDescription2'] as String?,
+    ]);
+    // `bh` / `bhd` carry planned ETAs (e.g. start time or cut-off time).
     final bh = (entry['bh'] as String?)?.trim();
-    final description = (bh != null && bh.isNotEmpty && typeStr == 'bh')
-        ? 'ETA $bh'
-        : null;
+    final etaSuffix = (bh != null && bh.isNotEmpty) ? ' · ETA $bh' : '';
 
-    return GpxWaypoint(
-      latLng: latLng,
-      elevation: ele,
-      name: name,
-      description: description,
-      type: wpType,
-    );
+    final typeStrs = <String>[
+      (entry['type'] as String?)?.toLowerCase().trim() ?? '',
+      (entry['type2'] as String?)?.toLowerCase().trim() ?? '',
+      (entry['type3'] as String?)?.toLowerCase().trim() ?? '',
+    ];
+
+    final waypoints = <GpxWaypoint>[];
+    for (int i = 0; i < typeStrs.length; i++) {
+      final typeStr = typeStrs[i];
+      if (typeStr.isEmpty) continue;
+      final wpType = _mapType(typeStr);
+
+      // Primary keeps the clean place name; secondary markers get the
+      // type label suffixed so the sidebar distinguishes them even
+      // though the coordinates are identical.
+      String name;
+      if (i == 0) {
+        name = (baseName == null || baseName.isEmpty) ? wpType.label : baseName;
+      } else {
+        name = (baseName == null || baseName.isEmpty)
+            ? wpType.label
+            : '$baseName (${wpType.label})';
+      }
+      if (i == 0) name = '$name$etaSuffix';
+
+      waypoints.add(GpxWaypoint(
+        latLng: latLng,
+        elevation: ele,
+        name: name,
+        description: i == 0 ? description : null,
+        type: wpType,
+      ));
+    }
+    return waypoints;
+  }
+
+  static String? _firstNonEmpty(List<String?> candidates) {
+    for (final c in candidates) {
+      final t = c?.trim();
+      if (t != null && t.isNotEmpty) return t;
+    }
+    return null;
   }
 
   static double? _asDouble(dynamic v) {
@@ -241,6 +286,22 @@ class TraceDeTrailImporter {
         return WaypointType.summit;
       case 'secours':
       case 'rescue':
+      case 'medical':
+      case 'infirmerie':
+        return WaypointType.medical;
+      case 'bh':
+      case 'time':
+      case 'horaire':
+        // Time-of-day checkpoint (planned ETA marker).
+        return WaypointType.info;
+      case 'text_1':
+      case 'text_2':
+      case 'text_3':
+      case 'text':
+        // Free-text annotation rendered as a label on the map.
+        return WaypointType.info;
+      case 'danger':
+      case 'attention':
         return WaypointType.danger;
       case 'camp':
       case 'bivouac':

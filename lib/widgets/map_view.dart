@@ -758,76 +758,111 @@ class _MapViewState extends State<MapView> {
   }
 
   Widget _buildWaypointLayer(GpxData data, GpxProvider provider) {
+    // Waypoints imported from Trace de Trail (or manually placed) can share
+    // identical coordinates — e.g. an aid station and a medical point at
+    // the same location. Group by coordinate so we can render each extra
+    // marker with a vertical pixel offset and keep them all clickable
+    // instead of stacking invisibly on top of each other.
+    final stackIndex = <String, int>{};
+    final groupCount = <String, int>{};
+    for (final wpt in data.waypoints) {
+      final key = _coordKey(wpt.latLng);
+      stackIndex[wpt.id] = groupCount[key] ?? 0;
+      groupCount[key] = (groupCount[key] ?? 0) + 1;
+    }
+    // Vertical pixel distance between successive stacked icons. Just
+    // enough that two icons (32 px tall) separate cleanly with a small
+    // gap between them.
+    const stackStep = 36.0;
+
     final markers = data.waypoints.map((wpt) {
       final color = WaypointIcons.colorFor(wpt.type);
       final icon = WaypointIcons.iconFor(wpt.type);
       final isSelected = wpt.id == provider.selectedPointId;
+      final idx = stackIndex[wpt.id] ?? 0;
+      // Extra height so the translated content doesn't get clipped by the
+      // Marker bounding box on platforms that do enforce clipping.
+      final extraHeight = idx * stackStep;
 
       return Marker(
         point: wpt.latLng,
         width: 36,
-        height: 44,
+        height: 44 + extraHeight,
         alignment: Alignment.topCenter,
-        child: GestureDetector(
-          onTap: () {
-            if (provider.editMode == EditMode.deletePoint) {
-              provider.removeWaypoint(wpt.id);
-            } else {
-              provider.selectPoint(wpt.id);
-            }
-          },
-          onPanStart: (_) {
-            _draggingPointId = wpt.id;
-            _isDraggingWaypoint = true;
-          },
-          onPanUpdate: (details) {
-            if (_draggingPointId != null && _isDraggingWaypoint) {
-              final renderBox = context.findRenderObject() as RenderBox;
-              final localPos = renderBox.globalToLocal(details.globalPosition);
-              final point = _mapController.camera.pointToLatLng(
-                math.Point(localPos.dx, localPos.dy),
-              );
-              provider.moveWaypoint(_draggingPointId!, point);
-            }
-          },
-          onPanEnd: (_) {
-            _draggingPointId = null;
-            _isDraggingWaypoint = false;
-          },
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: isSelected ? Colors.white : Colors.transparent,
-                    width: 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.4),
-                      blurRadius: isSelected ? 8 : 4,
-                      offset: const Offset(0, 2),
+        child: Transform.translate(
+          offset: Offset(0, -idx * stackStep),
+          child: GestureDetector(
+            onTap: () {
+              if (provider.editMode == EditMode.deletePoint) {
+                provider.removeWaypoint(wpt.id);
+              } else {
+                provider.selectPoint(wpt.id);
+              }
+            },
+            onPanStart: (_) {
+              _draggingPointId = wpt.id;
+              _isDraggingWaypoint = true;
+            },
+            onPanUpdate: (details) {
+              if (_draggingPointId != null && _isDraggingWaypoint) {
+                final renderBox = context.findRenderObject() as RenderBox;
+                final localPos = renderBox.globalToLocal(details.globalPosition);
+                final point = _mapController.camera.pointToLatLng(
+                  math.Point(localPos.dx, localPos.dy),
+                );
+                provider.moveWaypoint(_draggingPointId!, point);
+              }
+            },
+            onPanEnd: (_) {
+              _draggingPointId = null;
+              _isDraggingWaypoint = false;
+            },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isSelected ? Colors.white : Colors.transparent,
+                      width: 2,
                     ),
-                  ],
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.4),
+                        blurRadius: isSelected ? 8 : 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Icon(icon, color: Colors.white, size: 18),
                 ),
-                child: Icon(icon, color: Colors.white, size: 18),
-              ),
-              CustomPaint(
-                size: const Size(10, 8),
-                painter: _TrianglePainter(color),
-              ),
-            ],
+                // Only the bottom (primary) marker draws the triangle
+                // pointer so the stack reads as one pin with extra
+                // icons floating above it, not a ladder of pins.
+                if (idx == 0)
+                  CustomPaint(
+                    size: const Size(10, 8),
+                    painter: _TrianglePainter(color),
+                  ),
+              ],
+            ),
           ),
         ),
       );
     }).toList();
 
     return MarkerLayer(markers: markers);
+  }
+
+  /// Coordinate key for grouping stacked waypoints. Rounded to ~1 m so
+  /// two imports from the same source that differ only by floating-point
+  /// precision still end up in the same stack.
+  static String _coordKey(LatLng p) {
+    return '${p.latitude.toStringAsFixed(5)},${p.longitude.toStringAsFixed(5)}';
   }
 
   MouseCursor _cursorForMode(EditMode mode) {

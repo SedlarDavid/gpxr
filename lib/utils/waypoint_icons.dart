@@ -7,6 +7,8 @@ class WaypointIcons {
       case WaypointType.generic:
         return Icons.flag_rounded;
       case WaypointType.aidStation:
+        return Icons.local_cafe_rounded;
+      case WaypointType.medical:
         return Icons.medical_services_rounded;
       case WaypointType.water:
         return Icons.water_drop_rounded;
@@ -34,6 +36,8 @@ class WaypointIcons {
       case WaypointType.generic:
         return const Color(0xFF6366F1);
       case WaypointType.aidStation:
+        return const Color(0xFFF59E0B);
+      case WaypointType.medical:
         return const Color(0xFFEF4444);
       case WaypointType.water:
         return const Color(0xFF3B82F6);
