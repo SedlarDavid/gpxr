@@ -96,18 +96,34 @@ flutter build web --release --dart-define-from-file=env.json
 ```
 
 The production bundle lands in `build/web/`. Deploy the contents to
-any static host.
+any static host of your choice (Netlify, Vercel, GitHub Pages,
+Cloudflare Pages, Azure Static Web Apps, Firebase Hosting, …). This
+repo intentionally ships no provider-specific deployment config — wire
+up your own pipeline and pass `MAPY_API_KEY` through as a CI secret.
 
-### Deploy-time secrets
+For Flutter web's CanvasKit renderer you generally want to serve the
+build with these response headers, regardless of host:
 
-- **GitHub Actions → Firebase** ([`.github/workflows/firebase-deploy.yml`](.github/workflows/firebase-deploy.yml)):
-  store `MAPY_API_KEY` as a repo secret. The workflow writes it into
-  `env.json` before the build step.
-- **Azure Static Web Apps** (what <https://gpxr.sedlardavid.cz> runs
-  on): the auto-generated SWA workflow committed when you connect the
-  repo needs the same `env.json` step before its `flutter build web`
-  invocation, or an equivalent `--dart-define=MAPY_API_KEY=${{ secrets.MAPY_API_KEY }}`
-  flag.
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: credentialless
+Cache-Control: public, max-age=31536000, immutable   # for *.js, *.wasm, assets
+```
+
+In CI, either pass the key inline:
+
+```yaml
+- run: flutter build web --release --dart-define=MAPY_API_KEY=${{ secrets.MAPY_API_KEY }}
+```
+
+or materialise `env.json` from a secret first:
+
+```yaml
+- run: jq -n --arg k "$MAPY_API_KEY" '{MAPY_API_KEY:$k}' > env.json
+  env:
+    MAPY_API_KEY: ${{ secrets.MAPY_API_KEY }}
+- run: flutter build web --release --dart-define-from-file=env.json
+```
 
 ## Project layout
 
