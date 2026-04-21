@@ -154,7 +154,15 @@ class Toolbar extends StatelessWidget {
                   onTap: provider.toggleTrackPoints,
                   iconSize: 10,
                 ),
+                const SizedBox(width: 16),
+                Container(width: 1, height: 24, color: AppTheme.borderColor),
+                const SizedBox(width: 16),
               ],
+              _ToolbarButton(
+                icon: Icons.lightbulb_outline_rounded,
+                label: 'Request feature',
+                onTap: _openFeatureRequest,
+              ),
             ],
           ),
         );
@@ -431,6 +439,15 @@ class Toolbar extends StatelessWidget {
     } finally {
       if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
     }
+  }
+
+  void _openFeatureRequest() {
+    web.window.open(
+      'https://github.com/SedlarDavid/gpxr/issues/new'
+          '?labels=enhancement'
+          '&title=Feature%20request%3A%20',
+      '_blank',
+    );
   }
 
   void _exportFile(BuildContext context, GpxProvider provider) {
