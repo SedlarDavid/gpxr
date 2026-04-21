@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://gpxr.sedlardavid.cz/sitemap.xml

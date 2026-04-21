@@ -1,36 +1,98 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
+    og:image / twitter:image point at /og-image.png — generate a
+    1200x630 PNG (screenshot of the editor works) and drop it into
+    web/ so social previews render a branded card.
   -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="GPXR - A lightweight GPX route editor">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+  <title>GPXR — Free online GPX route editor for trail running & hiking</title>
+  <meta name="description" content="Free, open-source GPX editor in your browser. Edit tracks, add aid-station waypoints, analyse elevation and climb categories, import Trace de Trail races, export Garmin course-point compatible GPX. No install, no signup.">
+  <meta name="keywords" content="GPX editor, GPX online, edit GPX file, GPX waypoint editor, trail running GPX, ultra trail planning, elevation profile, climb categories, Trace de Trail import, Garmin course points, route planner, hiking GPX, free GPX tool">
+  <meta name="author" content="David Sedlar">
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
+  <meta name="theme-color" content="#6366F1">
+  <meta name="color-scheme" content="light">
+
+  <link rel="canonical" href="https://gpxr.sedlardavid.cz/">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="GPXR">
+  <meta property="og:title" content="GPXR — Free online GPX route editor for trail running & hiking">
+  <meta property="og:description" content="Edit GPX tracks in your browser. Add aid-station waypoints, analyse climbs with cycling-style category badges, import Trace de Trail races, export Garmin course-point compatible GPX.">
+  <meta property="og:url" content="https://gpxr.sedlardavid.cz/">
+  <meta property="og:image" content="https://gpxr.sedlardavid.cz/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="GPXR route editor interface with an elevation profile and annotated trail waypoints">
+  <meta property="og:locale" content="en_US">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="GPXR — Free online GPX route editor">
+  <meta name="twitter:description" content="Edit GPX tracks in your browser. Climb analysis, Trace de Trail import, Garmin course-point export. No install.">
+  <meta name="twitter:image" content="https://gpxr.sedlardavid.cz/og-image.png">
+  <meta name="twitter:image:alt" content="GPXR route editor interface with an elevation profile and annotated trail waypoints">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="gpxr">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="GPXR">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
-
-  <title>GPXR - GPX Route Editor</title>
+  <link rel="icon" type="image/png" href="favicon.png">
   <link rel="manifest" href="manifest.json">
+
+  <!-- Warm up TCP to tile providers we hit as soon as the map loads. -->
+  <link rel="preconnect" href="https://tile.openstreetmap.org" crossorigin>
+  <link rel="preconnect" href="https://a.tile.opentopomap.org" crossorigin>
+  <link rel="preconnect" href="https://api.mapy.com" crossorigin>
+  <link rel="dns-prefetch" href="https://tile.openstreetmap.org">
+  <link rel="dns-prefetch" href="https://a.tile.opentopomap.org">
+  <link rel="dns-prefetch" href="https://api.mapy.com">
+
+  <!-- Structured data: helps Google surface the app name, rating slot,
+       and category on SERP. Keep fields in sync with the meta tags. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "GPXR",
+    "alternateName": "GPXR — GPX Route Editor",
+    "url": "https://gpxr.sedlardavid.cz/",
+    "description": "Free, open-source GPX editor in your browser. Edit tracks, add aid-station waypoints, analyse elevation and climb categories, import Trace de Trail races, export Garmin course-point compatible GPX.",
+    "applicationCategory": "SportsApplication",
+    "applicationSubCategory": "Route planner",
+    "operatingSystem": "Any (browser)",
+    "browserRequirements": "Requires JavaScript. Requires HTML5.",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "featureList": [
+      "Import and export GPX files",
+      "Add, move and delete track points",
+      "Stacked waypoint markers for aid stations and medical points",
+      "Elevation profile with hover crosshair",
+      "Automatic climb detection with cycling-style category badges",
+      "Trace de Trail waypoint import",
+      "Garmin course-point compatible GPX export"
+    ],
+    "inLanguage": "en",
+    "isAccessibleForFree": true
+  }
+  </script>
+
   <style>
     html, body { margin: 0; padding: 0; height: 100%; background: #0f172a; }
     #splash {
@@ -50,6 +112,10 @@
       animation: spin 0.9s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    /* Keep crawlable copy out of the visual flow when JS is enabled so
+       it never flashes to real users, while remaining in the DOM for
+       search-engine crawlers that don't execute JS. */
+    .seo-only { position: absolute; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; }
   </style>
 </head>
 <body>
@@ -58,6 +124,69 @@
     <div class="title">GPXR</div>
     <div class="subtitle">Loading route editor…</div>
   </div>
+
+  <!--
+    Crawlable copy: Flutter web renders into a canvas / wasm surface, so
+    most crawlers will not see any of the editor UI. Everything below is
+    plain semantic HTML for bots and screen-reader first-hit scanners.
+    Users with JS enabled never see it (pushed off-screen via .seo-only).
+  -->
+  <main class="seo-only" aria-hidden="true">
+    <h1>GPXR — Free online GPX route editor for trail running and hiking</h1>
+    <p>
+      GPXR is a free, open-source GPX editor that runs entirely in your
+      browser. Open a GPX file from Strava, Garmin Connect, Komoot or
+      Trace de Trail, edit the track, annotate aid stations and
+      checkpoints, inspect the elevation profile, and export a clean
+      Garmin-compatible GPX — no account, no install, no upload to a
+      third-party server.
+    </p>
+
+    <h2>Built for trail runners and ultra-distance hikers</h2>
+    <ul>
+      <li>Add, move, delete and reorder track points directly on the map.</li>
+      <li>Rich waypoint types: aid station, medical, water, food, summit, camp, info, danger, start and finish.</li>
+      <li>Snap-to-track so waypoints line up exactly with the course — Garmin Connect promotes them to course points on your watch.</li>
+      <li>Stacked waypoint markers when aid stations and medical points share the same location.</li>
+    </ul>
+
+    <h2>Interactive elevation profile with climb analysis</h2>
+    <ul>
+      <li>Hover crosshair synchronised between the map and the elevation chart.</li>
+      <li>Total ascent and descent computed with hysteresis filtering, so GPS jitter doesn't inflate your gain.</li>
+      <li>Automatic climb detection with length, gain, average grade, max grade over a 100&nbsp;m sliding window, and a cycling-style category badge from Cat&nbsp;4 up to HC.</li>
+    </ul>
+
+    <h2>Trace de Trail race import</h2>
+    <p>
+      One click pulls every waypoint Trace de Trail strips from its
+      downloadable GPX: aid stations, medical points, time checkpoints,
+      summits and place names. Secondary markers such as "aid station
+      plus medical" import as two distinct waypoints.
+    </p>
+
+    <h2>Garmin course-point compatible export</h2>
+    <p>
+      Waypoint <code>&lt;sym&gt;</code> and <code>&lt;type&gt;</code>
+      symbols are preserved so Garmin Connect maps them to the right
+      course-point icons (food, water, summit, danger, …) on your
+      watch's course navigation screen.
+    </p>
+
+    <h2>Multiple map layers</h2>
+    <p>
+      OpenStreetMap, OpenTopoMap, satellite imagery and Mapy.com outdoor
+      tiles, with hover-aware track highlighting that stays smooth on
+      50&nbsp;km plus routes.
+    </p>
+
+    <h2>Free and open source</h2>
+    <p>
+      GPXR is released under the MIT licence. Tracks never leave your
+      browser — parsing, editing and exporting all happen locally.
+    </p>
+  </main>
+
   <script>
     window.addEventListener('flutter-first-frame', function () {
       var s = document.getElementById('splash');

@@ -1,21 +1,29 @@
-# gpxr
+# GPXR — GPX Route Editor
+
+[![Live demo](https://img.shields.io/badge/demo-gpxr.sedlardavid.cz-6366F1)](https://gpxr.sedlardavid.cz)
+[![License: MIT](https://img.shields.io/badge/license-MIT-22c55e)](LICENSE)
+[![Built with Flutter](https://img.shields.io/badge/built%20with-Flutter-02569B?logo=flutter)](https://flutter.dev)
 
 A lightweight GPX route editor for the web, built with Flutter. Designed
-for trail runners and hikers who want to plan, tweak, and annotate GPX
-tracks from their browser without installing anything.
+for trail runners and hikers who want to plan, tweak and annotate GPX
+tracks from their browser without installing anything. Tracks are
+parsed, edited and exported entirely client-side — your files never
+leave your browser.
+
+**Live at <https://gpxr.sedlardavid.cz>.**
 
 ## Features
 
 ### Route editing
 - Import and export GPX files
-- Add, move, delete, and reorder track points directly on the map
+- Add, move, delete and reorder track points directly on the map
 - Reverse route direction in one click
 - Smart insert: click near the track and the new point is placed on
   the closest segment instead of at the end
 
 ### Waypoints
-- Rich set of built-in types: aid station, medical, water, food, summit,
-  camp, parking, info, danger, start, finish, generic
+- Rich set of built-in types: aid station, medical, water, food,
+  summit, camp, parking, info, danger, start, finish, generic
 - Snap-to-track on click or drop so waypoints line up exactly with the
   course (Garmin course-point compatible on export)
 - Stacked markers when multiple waypoints share a location, rendered
@@ -24,20 +32,25 @@ tracks from their browser without installing anything.
   to the right course-point icons on your watch
 
 ### Elevation analysis
-- Interactive elevation profile with hover crosshair synchronized to
+- Interactive elevation profile with hover crosshair synchronised to
   the map
+- Waypoint icons drawn on the profile so you can see aid stations,
+  summits and checkpoints in elevation context at a glance
 - Total ascent / descent computed with hysteresis filtering (no more
   GPS jitter inflating your elevation gain by 30%)
 - **Climbs tab**: automatic detection of every significant hill on the
   track, with length, gain, average grade, max grade (over a 100 m
-  sliding window), and a cycling-style category badge (Cat 4 → HC).
-  Grade percentages are color-coded
+  sliding window) and a cycling-style category badge (Cat 4 → HC).
+  Hovering a climb highlights its extent on the map
+- **Splits tab**: race-brief style table of waypoints with cumulative
+  distance from start and leg distance to the next point
 
 ### Trace de Trail import
 - Auto-detected on import: if the GPX metadata links back to a
   [tracedetrail.fr](https://tracedetrail.fr) race page, you're offered
   a one-click waypoint pull right after opening the file
-- Or paste a race URL manually to enrich any track
+- Or paste a race URL manually via **Tools → Import waypoints from
+  Trace de Trail**
 - Pulls every waypoint the downloadable GPX strips out: aid stations,
   medical points, time checkpoints, summits, …
 - Handles secondary and tertiary markers (`type2` / `type3`) so an
@@ -46,8 +59,8 @@ tracks from their browser without installing anything.
 - Routes through CORS proxies with automatic fallback
 
 ### Map
-- Multiple tile layers (OpenStreetMap, OpenTopoMap, satellite, Mapy.cz,
-  and more)
+- Multiple tile layers (OpenStreetMap, OpenTopoMap, satellite,
+  Mapy.com outdoor, and more)
 - Hover-aware track highlighting with screen-space caching so 50 km+
   tracks stay smooth
 
@@ -58,21 +71,23 @@ Requirements: [Flutter](https://docs.flutter.dev/get-started/install)
 
 ```bash
 flutter pub get
-cp env.example.json env.json   # fill in your keys
+cp env.example.json env.json   # fill in your keys (see below)
 flutter run -d chrome --dart-define-from-file=env.json
 ```
 
-`env.json` is gitignored. VS Code launch configs already pass the file,
-so hitting F5 just works once the file exists.
+`env.json` is gitignored. The VS Code launch configs already pass
+`--dart-define-from-file=env.json` so pressing F5 works once the file
+exists.
 
 ### Configuration keys
 
-| Key             | Used for                              | Required? |
-| --------------- | ------------------------------------- | --------- |
-| `MAPY_API_KEY`  | Mapy.com outdoor / satellite tiles    | Optional — if unset, the Mapy layer is hidden and OSM is the default |
+| Key            | Used for                             | Required? |
+| -------------- | ------------------------------------ | --------- |
+| `MAPY_API_KEY` | Mapy.com outdoor / satellite tiles   | Optional — if unset, the Mapy layer is hidden and OpenStreetMap is the default |
 
-Mapy.com keys should be **domain-restricted** in the Mapy dashboard —
-anything in a web bundle is visible to the browser.
+Grab a free key at <https://developer.mapy.com>. Mapy.com keys should
+be **domain-restricted** in the Mapy dashboard — anything shipped in a
+web bundle is visible to the browser.
 
 ## Building for the web
 
@@ -80,44 +95,66 @@ anything in a web bundle is visible to the browser.
 flutter build web --release --dart-define-from-file=env.json
 ```
 
-The production bundle lands in `build/web/`. Deploy it to any static
-host — Firebase Hosting config is already included (`firebase.json`),
-just set your project id in `.firebaserc` and run `firebase deploy`.
+The production bundle lands in `build/web/`. Deploy the contents to
+any static host.
 
 ### Deploy-time secrets
 
-- **GitHub Actions → Firebase** (`.github/workflows/firebase-deploy.yml`):
+- **GitHub Actions → Firebase** ([`.github/workflows/firebase-deploy.yml`](.github/workflows/firebase-deploy.yml)):
   store `MAPY_API_KEY` as a repo secret. The workflow writes it into
   `env.json` before the build step.
-- **Azure Static Web Apps**: the auto-generated SWA workflow (usually
-  committed to the repo the first time you connect Azure) needs the
-  same `env.json` step before its `flutter build web` invocation, or
-  an equivalent `--dart-define=MAPY_API_KEY=${{ secrets.MAPY_API_KEY }}`
+- **Azure Static Web Apps** (what <https://gpxr.sedlardavid.cz> runs
+  on): the auto-generated SWA workflow committed when you connect the
+  repo needs the same `env.json` step before its `flutter build web`
+  invocation, or an equivalent `--dart-define=MAPY_API_KEY=${{ secrets.MAPY_API_KEY }}`
   flag.
 
 ## Project layout
 
 ```
 lib/
-  main.dart                  app entry point
-  models/gpx_models.dart     GPX data model + waypoint types
-  providers/gpx_provider.dart state management (ChangeNotifier)
-  screens/editor_screen.dart  top-level editor layout
+  main.dart                      app entry point
+  models/gpx_models.dart         GPX data model + waypoint types
+  providers/gpx_provider.dart    state management (ChangeNotifier)
+  screens/editor_screen.dart     top-level editor layout
   services/
-    gpx_parser.dart          GPX XML parse / export
-    tracedetrail_importer.dart  race-page waypoint scraper
+    gpx_parser.dart              GPX XML parse / export
+    tracedetrail_importer.dart   race-page waypoint scraper
   utils/
-    elevation_profile.dart   distance / elevation / snap math
-    climb_detector.dart      hill detection with grade analysis
-    geo_utils.dart           distance + hysteresis gain / loss
-    waypoint_icons.dart      type → icon / color
+    elevation_profile.dart       distance / elevation / snap math
+    climb_detector.dart          hill detection with grade analysis
+    geo_utils.dart               distance + hysteresis gain / loss
+    waypoint_icons.dart          type → icon / color
   widgets/
-    toolbar.dart             file + edit actions
-    sidebar.dart             stats + points / waypoints / climbs tabs
-    map_view.dart            flutter_map rendering + hover
-    elevation_profile_chart.dart  interactive profile
+    toolbar.dart                 file + edit actions
+    sidebar.dart                 stats + points / waypoints / climbs / splits tabs
+    map_view.dart                flutter_map rendering + hover
+    elevation_profile_chart.dart interactive profile
+    welcome_dialog.dart          first-run intro + Ko-fi link
+web/
+  index.html                     SEO meta, OG cards, JSON-LD, crawlable copy
+  manifest.json                  PWA manifest
+  robots.txt, sitemap.xml        crawler hints
 ```
+
+## Contributing
+
+Issues and pull requests are welcome. A few conventions:
+
+- Run `dart analyze` and `dart format .` before pushing — CI will
+  reject formatting drift.
+- Keep commits scoped and descriptive; conventional-commit style is a
+  plus but not required.
+- No new runtime dependencies without a matching `Why:` in the PR
+  description — the project aims to stay lean.
+
+## Acknowledgements
+
+- [`flutter_map`](https://pub.dev/packages/flutter_map) for the map
+  widget, and OpenStreetMap, OpenTopoMap and Mapy.com for tiles.
+- [Trace de Trail](https://tracedetrail.fr) for publishing race
+  waypoint data that the importer draws from.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

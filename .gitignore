@@ -40,6 +40,9 @@ app.*.symbols
 # Local secrets — commit env.example.json, not env.json
 env.json
 
+# Claude Code local cache
+.claude/
+
 # Obfuscation related
 app.*.map.json
 
