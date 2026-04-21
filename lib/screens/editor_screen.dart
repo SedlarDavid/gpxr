@@ -2,9 +2,24 @@ import 'package:flutter/material.dart';
 import '../widgets/map_view.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/toolbar.dart';
+import '../widgets/welcome_dialog.dart';
 
-class EditorScreen extends StatelessWidget {
+class EditorScreen extends StatefulWidget {
   const EditorScreen({super.key});
+
+  @override
+  State<EditorScreen> createState() => _EditorScreenState();
+}
+
+class _EditorScreenState extends State<EditorScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      maybeShowWelcomeDialog(context);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -416,6 +416,31 @@ class _MapViewState extends State<MapView> {
                     _buildStartFinishMarkers(profile),
                   if (data != null && provider.showWaypoints)
                     _buildWaypointLayer(data, provider),
+                  // Climb highlight (active when user hovers a climb tile).
+                  ValueListenableBuilder<(double, double)?>(
+                    valueListenable: provider.hoveredClimbRange,
+                    builder: (context, range, _) {
+                      if (range == null || profile.length < 2) {
+                        return PolylineLayer(polylines: const <Polyline>[]);
+                      }
+                      final (start, end) = range;
+                      final pts = _climbLatLngs(profile, start, end);
+                      if (pts.length < 2) {
+                        return PolylineLayer(polylines: const <Polyline>[]);
+                      }
+                      return PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: pts,
+                            color: const Color(0xFFEF4444),
+                            strokeWidth: 6,
+                            borderColor: Colors.white,
+                            borderStrokeWidth: 2,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                   // Hover marker on the route.
                   ValueListenableBuilder<double?>(
                     valueListenable: provider.hoverDistance,
@@ -789,10 +814,10 @@ class _MapViewState extends State<MapView> {
       stackIndex[wpt.id] = groupCount[key] ?? 0;
       groupCount[key] = (groupCount[key] ?? 0) + 1;
     }
-    // Vertical pixel distance between successive stacked icons. Just
-    // enough that two icons (32 px tall) separate cleanly with a small
-    // gap between them.
-    const stackStep = 36.0;
+    // Vertical pixel distance between successive stacked icons. Icons
+    // are 32 px tall; 30 lets them sit with a 2 px visual seam so the
+    // stack reads as one vertical strip instead of a ladder with gaps.
+    const stackStep = 30.0;
 
     final markers = data.waypoints.map((wpt) {
       final color = WaypointIcons.colorFor(wpt.type);
@@ -875,6 +900,24 @@ class _MapViewState extends State<MapView> {
     }).toList();
 
     return MarkerLayer(markers: markers);
+  }
+
+  /// Returns the poly-line vertices that lie between [start] and [end]
+  /// cumulative distances along the profile, with interpolated endpoints
+  /// so the highlight snaps exactly onto the climb bounds rather than to
+  /// the nearest recorded track point.
+  static List<LatLng> _climbLatLngs(
+    ElevationProfile profile,
+    double start,
+    double end,
+  ) {
+    final result = <LatLng>[profile.sampleAtDistance(start).latLng];
+    for (var i = 0; i < profile.length; i++) {
+      final d = profile.distances[i];
+      if (d > start && d < end) result.add(profile.points[i].latLng);
+    }
+    result.add(profile.sampleAtDistance(end).latLng);
+    return result;
   }
 
   /// Coordinate key for grouping stacked waypoints. Rounded to ~1 m so
@@ -1044,26 +1087,29 @@ class _HoverTooltip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const width = 140.0;
-        const height = 44.0;
-        double left = cursor.dx + 14;
-        double top = cursor.dy + 14;
-        if (left + width > constraints.maxWidth - 4) {
-          left = cursor.dx - width - 14;
-        }
-        if (top + height > constraints.maxHeight - 4) {
-          top = cursor.dy - height - 14;
-        }
-        if (left < 4) left = 4;
-        if (top < 4) top = 4;
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            const width = 140.0;
+            const height = 44.0;
+            double left = cursor.dx + 14;
+            double top = cursor.dy + 14;
+            if (left + width > constraints.maxWidth - 4) {
+              left = cursor.dx - width - 14;
+            }
+            if (top + height > constraints.maxHeight - 4) {
+              top = cursor.dy - height - 14;
+            }
+            if (left < 4) left = 4;
+            if (top < 4) top = 4;
 
-        return Positioned(
-          left: left,
-          top: top,
-          child: IgnorePointer(
-            child: Container(
+            return Stack(
+              children: [
+                Positioned(
+                  left: left,
+                  top: top,
+                  child: Container(
               width: width,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
@@ -1122,9 +1168,12 @@ class _HoverTooltip extends StatelessWidget {
                 ],
               ),
             ),
-          ),
-        );
-      },
+                ),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 }

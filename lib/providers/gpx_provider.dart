@@ -35,6 +35,13 @@ class GpxProvider extends ChangeNotifier {
   /// hover updates don't rebuild the whole widget tree.
   final ValueNotifier<double?> hoverDistance = ValueNotifier(null);
 
+  /// (startDistance, endDistance) of the climb currently hovered in the
+  /// sidebar's climbs tab, used to highlight its extent on the map.
+  /// Null when no climb is hovered.
+  final ValueNotifier<(double, double)?> hoveredClimbRange = ValueNotifier(
+    null,
+  );
+
   /// Maximum distance (meters) within which a clicked or existing waypoint
   /// is automatically pulled onto the nearest point of the track. Matches
   /// what Garmin Connect typically tolerates when promoting GPX waypoints
@@ -58,6 +65,7 @@ class GpxProvider extends ChangeNotifier {
   @override
   void dispose() {
     hoverDistance.dispose();
+    hoveredClimbRange.dispose();
     super.dispose();
   }
 

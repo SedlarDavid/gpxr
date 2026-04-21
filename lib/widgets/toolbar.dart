@@ -71,19 +71,23 @@ class Toolbar extends StatelessWidget {
               ),
               const SizedBox(width: 4),
               _ToolbarButton(
-                icon: Icons.public_rounded,
-                label: 'Import waypoints from Trace de Trail',
-                onTap: provider.hasData
-                    ? () => _importTraceDeTrailWaypoints(context, provider)
-                    : null,
-              ),
-              const SizedBox(width: 4),
-              _ToolbarButton(
                 icon: Icons.download_rounded,
                 label: 'Export',
                 onTap: provider.hasData
                     ? () => _exportFile(context, provider)
                     : null,
+              ),
+              const SizedBox(width: 4),
+              _ToolbarMenu(
+                enabled: provider.hasData,
+                items: [
+                  _ToolbarMenuItem(
+                    icon: Icons.public_rounded,
+                    label: 'Import waypoints from Trace de Trail',
+                    onTap: () =>
+                        _importTraceDeTrailWaypoints(context, provider),
+                  ),
+                ],
               ),
               const SizedBox(width: 16),
               Container(width: 1, height: 24, color: AppTheme.borderColor),
@@ -518,6 +522,79 @@ class _ToolbarButton extends StatelessWidget {
                 ],
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ToolbarMenuItem {
+  const _ToolbarMenuItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+}
+
+class _ToolbarMenu extends StatelessWidget {
+  const _ToolbarMenu({required this.enabled, required this.items});
+
+  final bool enabled;
+  final List<_ToolbarMenuItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = enabled
+        ? AppTheme.textPrimary
+        : AppTheme.textSecondary.withValues(alpha: 0.4);
+    return Tooltip(
+      message: 'More tools',
+      child: PopupMenuButton<int>(
+        enabled: enabled,
+        tooltip: '',
+        position: PopupMenuPosition.under,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        itemBuilder: (ctx) => [
+          for (var i = 0; i < items.length; i++)
+            PopupMenuItem<int>(
+              value: i,
+              child: Row(
+                children: [
+                  Icon(items[i].icon, size: 16, color: AppTheme.textPrimary),
+                  const SizedBox(width: 10),
+                  Text(
+                    items[i].label,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+        onSelected: (i) => items[i].onTap(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(
+            children: [
+              Icon(Icons.build_rounded, size: 16, color: color),
+              const SizedBox(width: 6),
+              Text(
+                'Tools',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: color,
+                ),
+              ),
+              Icon(Icons.arrow_drop_down_rounded, size: 18, color: color),
+            ],
           ),
         ),
       ),

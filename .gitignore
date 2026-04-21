@@ -37,6 +37,9 @@ migrate_working_dir/
 # Symbolication related
 app.*.symbols
 
+# Local secrets — commit env.example.json, not env.json
+env.json
+
 # Obfuscation related
 app.*.map.json
 

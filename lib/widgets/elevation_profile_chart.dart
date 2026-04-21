@@ -8,12 +8,16 @@ class WaypointTick {
   const WaypointTick({
     required this.distance,
     required this.color,
+    required this.icon,
     this.offTrack = false,
   });
 
   /// Cumulative distance (meters) along the track.
   final double distance;
   final Color color;
+  /// Material icon drawn in a pill at the top of the tick so the user can
+  /// recognise waypoint types at a glance on the elevation profile.
+  final IconData icon;
   /// Renders as a hollow, dashed-style marker so users can tell off-track
   /// waypoints (e.g. a landmark placed beside the trail) from snapped ones.
   final bool offTrack;
@@ -37,7 +41,7 @@ class ElevationProfileChart extends StatelessWidget {
   final double height;
 
   static const double _padH = 8;
-  static const double _padTop = 20;
+  static const double _padTop = 26;
   static const double _padBottom = 16;
 
   void _updateHover(double localX, double width) {
@@ -222,37 +226,53 @@ class _ElevationPainter extends CustomPainter {
       Alignment.topRight,
     );
 
-    // Waypoint ticks along the baseline.
+    // Waypoint ticks: a faint vertical line drops from the waypoint's
+    // icon pill down to the baseline so users can link "this icon sits
+    // at that distance/elevation" at a glance.
+    const iconSize = 12.0;
+    const pillR = 4.0;
+    final pillH = iconSize + 4;
     for (final tick in waypointTicks) {
       if (tick.distance < 0 || tick.distance > totalD) continue;
       final tx = xFor(tick.distance);
-      final topY = padTop + 2;
-      final botY = baselineY;
+      final pillTop = 1.0;
+      final pillBottom = pillTop + pillH;
       final tickPaint = Paint()
         ..color = tick.color.withValues(alpha: 0.45)
         ..strokeWidth = 1;
-      canvas.drawLine(Offset(tx, topY), Offset(tx, botY), tickPaint);
-      // Marker at the baseline: filled circle for on-track, hollow for off.
+      canvas.drawLine(
+        Offset(tx, pillBottom),
+        Offset(tx, baselineY),
+        tickPaint,
+      );
+
+      // Icon pill at the top of the tick.
+      final pillRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(tx - pillH / 2, pillTop, pillH, pillH),
+        const Radius.circular(pillR),
+      );
       if (tick.offTrack) {
-        canvas.drawCircle(
-          Offset(tx, botY),
-          3,
+        canvas.drawRRect(
+          pillRect,
+          Paint()..color = Colors.white,
+        );
+        canvas.drawRRect(
+          pillRect,
           Paint()
             ..color = tick.color
             ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.4,
+            ..strokeWidth = 1.2,
         );
       } else {
-        canvas.drawCircle(Offset(tx, botY), 3, Paint()..color = tick.color);
-        canvas.drawCircle(
-          Offset(tx, botY),
-          3,
-          Paint()
-            ..color = Colors.white
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1,
-        );
+        canvas.drawRRect(pillRect, Paint()..color = tick.color);
       }
+      _drawIcon(
+        canvas,
+        tick.icon,
+        Offset(tx, pillTop + pillH / 2),
+        iconSize,
+        tick.offTrack ? tick.color : Colors.white,
+      );
     }
 
     // Hover indicator.
@@ -306,6 +326,31 @@ class _ElevationPainter extends CustomPainter {
     tp.paint(canvas, Offset(dx, anchor.dy));
   }
 
+  void _drawIcon(
+    Canvas canvas,
+    IconData icon,
+    Offset center,
+    double size,
+    Color color,
+  ) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: String.fromCharCode(icon.codePoint),
+        style: TextStyle(
+          fontSize: size,
+          fontFamily: icon.fontFamily,
+          package: icon.fontPackage,
+          color: color,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(
+      canvas,
+      Offset(center.dx - tp.width / 2, center.dy - tp.height / 2),
+    );
+  }
+
   void _drawPill(Canvas canvas, Size size, String text, double x) {
     final tp = TextPainter(
       text: TextSpan(
@@ -344,6 +389,7 @@ class _ElevationPainter extends CustomPainter {
     for (int i = 0; i < a.length; i++) {
       if (a[i].distance != b[i].distance ||
           a[i].color != b[i].color ||
+          a[i].icon != b[i].icon ||
           a[i].offTrack != b[i].offTrack) {
         return false;
       }

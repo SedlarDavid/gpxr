@@ -58,18 +58,42 @@ Requirements: [Flutter](https://docs.flutter.dev/get-started/install)
 
 ```bash
 flutter pub get
-flutter run -d chrome
+cp env.example.json env.json   # fill in your keys
+flutter run -d chrome --dart-define-from-file=env.json
 ```
+
+`env.json` is gitignored. VS Code launch configs already pass the file,
+so hitting F5 just works once the file exists.
+
+### Configuration keys
+
+| Key             | Used for                              | Required? |
+| --------------- | ------------------------------------- | --------- |
+| `MAPY_API_KEY`  | Mapy.com outdoor / satellite tiles    | Optional — if unset, the Mapy layer is hidden and OSM is the default |
+
+Mapy.com keys should be **domain-restricted** in the Mapy dashboard —
+anything in a web bundle is visible to the browser.
 
 ## Building for the web
 
 ```bash
-flutter build web --release
+flutter build web --release --dart-define-from-file=env.json
 ```
 
 The production bundle lands in `build/web/`. Deploy it to any static
 host — Firebase Hosting config is already included (`firebase.json`),
 just set your project id in `.firebaserc` and run `firebase deploy`.
+
+### Deploy-time secrets
+
+- **GitHub Actions → Firebase** (`.github/workflows/firebase-deploy.yml`):
+  store `MAPY_API_KEY` as a repo secret. The workflow writes it into
+  `env.json` before the build step.
+- **Azure Static Web Apps**: the auto-generated SWA workflow (usually
+  committed to the repo the first time you connect Azure) needs the
+  same `env.json` step before its `flutter build web` invocation, or
+  an equivalent `--dart-define=MAPY_API_KEY=${{ secrets.MAPY_API_KEY }}`
+  flag.
 
 ## Project layout
 

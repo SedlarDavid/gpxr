@@ -89,7 +89,7 @@ class _SidebarContentState extends State<_SidebarContent>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -123,6 +123,7 @@ class _SidebarContentState extends State<_SidebarContent>
               Tab(text: 'Points'),
               Tab(text: 'Waypoints'),
               Tab(text: 'Climbs'),
+              Tab(text: 'Splits'),
             ],
           ),
           const Divider(height: 1),
@@ -133,6 +134,7 @@ class _SidebarContentState extends State<_SidebarContent>
                 _TrackPointsList(),
                 _WaypointsList(),
                 _ClimbsList(),
+                _SplitsList(),
               ],
             ),
           ),
@@ -164,6 +166,7 @@ class _RouteStats extends StatelessWidget {
             ticks.add(WaypointTick(
               distance: nearest.distance,
               color: WaypointIcons.colorFor(wpt.type),
+              icon: WaypointIcons.iconFor(wpt.type),
               offTrack: nearest.distanceToLineMeters > GpxProvider.snapTolerance,
             ));
           }
@@ -951,8 +954,13 @@ class _ClimbTile extends StatelessWidget {
     final maxPct = climb.maxGrade * 100;
     final gradeColor = _gradeColor(avgPct);
     final categoryColor = _categoryColor(climb.category);
+    final provider = context.read<GpxProvider>();
 
-    return Container(
+    return MouseRegion(
+      onEnter: (_) => provider.hoveredClimbRange.value =
+          (climb.startDistance, climb.endDistance),
+      onExit: (_) => provider.hoveredClimbRange.value = null,
+      child: Container(
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -1080,6 +1088,7 @@ class _ClimbTile extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -1153,4 +1162,279 @@ class _ClimbStat extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Projects each waypoint onto the track and lists them in track order
+/// with cumulative distance from start and "to next" leg distance — the
+/// classic race-brief "aid-station table" most trail runners check before
+/// a race.
+class _SplitsList extends StatelessWidget {
+  const _SplitsList();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<GpxProvider>(
+      builder: (context, provider, _) {
+        final data = provider.data;
+        if (data == null) {
+          return const _ClimbsEmpty(
+            icon: Icons.flag_rounded,
+            title: 'No waypoints',
+            subtitle: 'Load a GPX with waypoints to see a splits table.',
+          );
+        }
+        if (data.waypoints.isEmpty) {
+          return const _ClimbsEmpty(
+            icon: Icons.flag_rounded,
+            title: 'No waypoints',
+            subtitle:
+                'Add waypoints on the map or import them from Trace de Trail '
+                '(Tools menu).',
+          );
+        }
+        final trackPoints =
+            data.tracks.expand((t) => t.allPoints).toList(growable: false);
+        final profile = ElevationProfile.fromPoints(trackPoints);
+        if (profile.isEmpty) {
+          return const _ClimbsEmpty(
+            icon: Icons.flag_rounded,
+            title: 'No track',
+            subtitle: 'Splits need a track to project waypoints onto.',
+          );
+        }
+
+        final rows = <_SplitRow>[];
+        for (final wpt in data.waypoints) {
+          final nearest = profile.nearestOnTrack(wpt.latLng);
+          if (nearest == null) continue;
+          rows.add(_SplitRow(
+            name: _firstNonBlank(wpt.name) ?? _defaultName(wpt.type),
+            distance: nearest.distance,
+            color: WaypointIcons.colorFor(wpt.type),
+            icon: WaypointIcons.iconFor(wpt.type),
+            offTrack:
+                nearest.distanceToLineMeters > GpxProvider.snapTolerance,
+          ));
+        }
+        rows.sort((a, b) => a.distance.compareTo(b.distance));
+
+        return Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor,
+                border: Border(
+                  bottom: BorderSide(color: AppTheme.borderColor),
+                ),
+              ),
+              child: Row(
+                children: const [
+                  Expanded(
+                    flex: 5,
+                    child: Text(
+                      'WAYPOINT',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 58,
+                    child: Text(
+                      'KM',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  SizedBox(
+                    width: 58,
+                    child: Text(
+                      'TO NEXT',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                itemCount: rows.length,
+                separatorBuilder: (_, _) => Divider(
+                  height: 1,
+                  color: AppTheme.borderColor.withValues(alpha: 0.5),
+                ),
+                itemBuilder: (context, index) {
+                  final row = rows[index];
+                  final toNext = index < rows.length - 1
+                      ? rows[index + 1].distance - row.distance
+                      : 0.0;
+                  final provider = context.read<GpxProvider>();
+                  return MouseRegion(
+                    onEnter: (_) {
+                      if (index < rows.length - 1) {
+                        provider.hoveredClimbRange.value =
+                            (row.distance, rows[index + 1].distance);
+                      }
+                    },
+                    onExit: (_) => provider.hoveredClimbRange.value = null,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 9,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 5,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 22,
+                                  height: 22,
+                                  decoration: BoxDecoration(
+                                    color: row.offTrack
+                                        ? Colors.white
+                                        : row.color,
+                                    borderRadius: BorderRadius.circular(5),
+                                    border: row.offTrack
+                                        ? Border.all(
+                                            color: row.color,
+                                            width: 1.2,
+                                          )
+                                        : null,
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Icon(
+                                    row.icon,
+                                    size: 13,
+                                    color: row.offTrack
+                                        ? row.color
+                                        : Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    row.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(
+                            width: 58,
+                            child: Text(
+                              GeoUtils.formatDistance(row.distance),
+                              textAlign: TextAlign.right,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          SizedBox(
+                            width: 58,
+                            child: Text(
+                              toNext > 0
+                                  ? GeoUtils.formatDistance(toNext)
+                                  : '—',
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: toNext > 0
+                                    ? AppTheme.textSecondary
+                                    : AppTheme.textSecondary
+                                        .withValues(alpha: 0.5),
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  static String? _firstNonBlank(String? s) =>
+      (s != null && s.trim().isNotEmpty) ? s.trim() : null;
+
+  static String _defaultName(WaypointType type) {
+    switch (type) {
+      case WaypointType.aidStation:
+        return 'Aid station';
+      case WaypointType.medical:
+        return 'Medical';
+      case WaypointType.water:
+        return 'Water';
+      case WaypointType.food:
+        return 'Food';
+      case WaypointType.summit:
+        return 'Summit';
+      case WaypointType.camp:
+        return 'Camp';
+      case WaypointType.parking:
+        return 'Parking';
+      case WaypointType.danger:
+        return 'Danger';
+      case WaypointType.info:
+        return 'Info';
+      case WaypointType.start:
+        return 'Start';
+      case WaypointType.finish:
+        return 'Finish';
+      case WaypointType.generic:
+        return 'Waypoint';
+    }
+  }
+}
+
+class _SplitRow {
+  const _SplitRow({
+    required this.name,
+    required this.distance,
+    required this.color,
+    required this.icon,
+    required this.offTrack,
+  });
+
+  final String name;
+  final double distance;
+  final Color color;
+  final IconData icon;
+  final bool offTrack;
 }
