@@ -31,16 +31,41 @@
 
   <title>GPXR - GPX Route Editor</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #0f172a; }
+    #splash {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px;
+      background: #0f172a; color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      z-index: 9999; transition: opacity .35s ease;
+    }
+    #splash.hide { opacity: 0; pointer-events: none; }
+    #splash .title { font-size: 28px; font-weight: 600; letter-spacing: .5px; }
+    #splash .subtitle { font-size: 14px; color: #94a3b8; }
+    #splash .spinner {
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 3px solid rgba(148,163,184,.25);
+      border-top-color: #22c55e;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+  <div id="splash">
+    <div class="spinner"></div>
+    <div class="title">GPXR</div>
+    <div class="subtitle">Loading route editor…</div>
+  </div>
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      var s = document.getElementById('splash');
+      if (!s) return;
+      s.classList.add('hide');
+      setTimeout(function () { s.remove(); }, 400);
+    });
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

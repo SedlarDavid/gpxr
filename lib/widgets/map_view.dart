@@ -63,16 +63,34 @@ class _MapViewState extends State<MapView> {
   String get _tileUrlTemplate {
     switch (_layer) {
       case _MapLayer.standard:
-        return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+        return 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png';
       case _MapLayer.outdoor:
         return 'https://api.mapy.com/v1/maptiles/outdoor/256/{z}/{x}/{y}?apikey=$_mapyApiKey';
+    }
+  }
+
+  List<String> get _tileSubdomains {
+    switch (_layer) {
+      case _MapLayer.standard:
+        return const ['a', 'b', 'c'];
+      case _MapLayer.outdoor:
+        return const [];
+    }
+  }
+
+  double get _tileMaxZoom {
+    switch (_layer) {
+      case _MapLayer.standard:
+        return 17;
+      case _MapLayer.outdoor:
+        return 19;
     }
   }
 
   String get _attributionText {
     switch (_layer) {
       case _MapLayer.standard:
-        return '© OpenStreetMap contributors';
+        return 'Map: © OpenTopoMap (CC-BY-SA) • Data: © OpenStreetMap contributors';
       case _MapLayer.outdoor:
         return '© Seznam.cz, a.s. • Mapy.com';
     }
@@ -386,8 +404,9 @@ class _MapViewState extends State<MapView> {
                   TileLayer(
                     key: ValueKey(_layer),
                     urlTemplate: _tileUrlTemplate,
+                    subdomains: _tileSubdomains,
                     userAgentPackageName: 'com.gpxr.app',
-                    maxZoom: 19,
+                    maxZoom: _tileMaxZoom,
                     tileProvider: CancellableNetworkTileProvider(),
                   ),
                   if (data != null) ..._buildTrackLayers(data, provider),
@@ -958,7 +977,7 @@ class _LayerMenuButton extends StatelessWidget {
             CheckedPopupMenuItem<_MapLayer>(
               value: _MapLayer.standard,
               checked: current == _MapLayer.standard,
-              child: const Text('Standard (OSM)'),
+              child: const Text('Topographic (OpenTopoMap)'),
             ),
             CheckedPopupMenuItem<_MapLayer>(
               value: _MapLayer.outdoor,

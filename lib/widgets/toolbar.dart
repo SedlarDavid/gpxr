@@ -1,8 +1,8 @@
 import 'dart:convert';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
+import 'dart:js_interop';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:web/web.dart' as web;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/gpx_provider.dart';
@@ -433,15 +433,19 @@ class Toolbar extends StatelessWidget {
     try {
       final xml = provider.exportToString();
       final bytes = utf8.encode(xml);
-      final blob = html.Blob([bytes], 'application/gpx+xml');
-      final url = html.Url.createObjectUrlFromBlob(blob);
+      final blob = web.Blob(
+        [bytes.toJS].toJS,
+        web.BlobPropertyBag(type: 'application/gpx+xml'),
+      );
+      final url = web.URL.createObjectURL(blob);
       final fileName = provider.fileName ?? 'route.gpx';
 
-      html.AnchorElement(href: url)
-        ..setAttribute('download', fileName)
-        ..click();
+      final anchor = web.HTMLAnchorElement()
+        ..href = url
+        ..download = fileName;
+      anchor.click();
 
-      html.Url.revokeObjectUrl(url);
+      web.URL.revokeObjectURL(url);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
