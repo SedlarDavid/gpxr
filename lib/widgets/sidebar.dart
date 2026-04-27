@@ -7,36 +7,44 @@ import '../utils/elevation_profile.dart';
 import '../utils/geo_utils.dart';
 import '../utils/theme.dart';
 import '../utils/waypoint_icons.dart';
+import 'add_waypoint_by_distance_dialog.dart';
 import 'elevation_profile_chart.dart';
 
 class Sidebar extends StatelessWidget {
-  const Sidebar({super.key});
+  const Sidebar({super.key, this.mobile = false});
+
+  /// When true the sidebar fills the parent's width (used in the mobile
+  /// bottom-sheet layout) instead of being a fixed 340px-wide column with
+  /// a right divider.
+  final bool mobile;
 
   @override
   Widget build(BuildContext context) {
     return Consumer<GpxProvider>(
       builder: (context, provider, _) {
         if (!provider.hasData) {
-          return const _EmptyState();
+          return _EmptyState(mobile: mobile);
         }
-        return const _SidebarContent();
+        return _SidebarContent(mobile: mobile);
       },
     );
   }
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  const _EmptyState({this.mobile = false});
+
+  final bool mobile;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 340,
+      width: mobile ? null : 340,
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(
-          right: BorderSide(color: AppTheme.borderColor),
-        ),
+        border: mobile
+            ? null
+            : Border(right: BorderSide(color: AppTheme.borderColor)),
       ),
       child: Center(
         child: Padding(
@@ -76,7 +84,9 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _SidebarContent extends StatefulWidget {
-  const _SidebarContent();
+  const _SidebarContent({this.mobile = false});
+
+  final bool mobile;
 
   @override
   State<_SidebarContent> createState() => _SidebarContentState();
@@ -101,16 +111,26 @@ class _SidebarContentState extends State<_SidebarContent>
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 340,
+      width: widget.mobile ? null : 340,
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(
-          right: BorderSide(color: AppTheme.borderColor),
-        ),
+        border: widget.mobile
+            ? null
+            : Border(right: BorderSide(color: AppTheme.borderColor)),
       ),
       child: Column(
         children: [
-          const _RouteStats(),
+          // _RouteStats has fixed-height sub-widgets (badge row + chart)
+          // that, on a short mobile bottom-sheet, can exceed the panel
+          // height. Wrap it in Flexible+SingleChildScrollView so the
+          // header gracefully scrolls instead of throwing a layout
+          // overflow exception.
+          Flexible(
+            fit: FlexFit.loose,
+            child: SingleChildScrollView(
+              child: const _RouteStats(),
+            ),
+          ),
           const Divider(height: 1),
           TabBar(
             controller: _tabController,
@@ -552,6 +572,7 @@ class _WaypointsList extends StatelessWidget {
         final waypoints = provider.data!.waypoints;
 
         if (waypoints.isEmpty) {
+          final hasTrack = !provider.elevationProfile().isEmpty;
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
@@ -573,6 +594,17 @@ class _WaypointsList extends StatelessWidget {
                       color: AppTheme.textSecondary.withValues(alpha: 0.7),
                       fontSize: 12,
                     ),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: hasTrack
+                        ? () => showAddWaypointByDistanceDialog(
+                              context,
+                              provider,
+                            )
+                        : null,
+                    icon: const Icon(Icons.straighten_rounded, size: 16),
+                    label: const Text('Add by km'),
                   ),
                 ],
               ),
@@ -633,6 +665,7 @@ class _WaypointsList extends StatelessWidget {
   void _editWaypoint(BuildContext context, GpxProvider provider, GpxWaypoint wpt) {
     final nameController = TextEditingController(text: wpt.name);
     final descController = TextEditingController(text: wpt.description);
+    final cutoffController = TextEditingController(text: wpt.cutoff);
     WaypointType selectedType = wpt.type;
 
     showDialog(
@@ -656,6 +689,15 @@ class _WaypointsList extends StatelessWidget {
                   controller: descController,
                   decoration: const InputDecoration(labelText: 'Description'),
                   maxLines: 2,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: cutoffController,
+                  decoration: const InputDecoration(
+                    labelText: 'Cutoff (optional)',
+                    hintText: '12:30 or 4:15:00',
+                    helperText: 'Race cutoff time at this waypoint',
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Text('Type', style: Theme.of(ctx).textTheme.labelMedium),
@@ -697,11 +739,14 @@ class _WaypointsList extends StatelessWidget {
             ),
             FilledButton(
               onPressed: () {
+                final cutoffText = cutoffController.text.trim();
                 provider.updateWaypoint(
                   wpt.id,
                   name: nameController.text,
                   description: descController.text.isEmpty ? null : descController.text,
                   type: selectedType,
+                  cutoff: cutoffText.isEmpty ? null : cutoffText,
+                  clearCutoff: cutoffText.isEmpty,
                 );
                 Navigator.pop(ctx);
               },
@@ -783,6 +828,20 @@ class _WaypointTile extends StatelessWidget {
             fontSize: 11,
             color: Color(0xFFB45309),
             fontWeight: FontWeight.w500,
+          ),
+        ));
+    }
+    if (waypoint.cutoff != null && waypoint.cutoff!.isNotEmpty) {
+      detailWidgets
+        ..add(Text(' · ', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)))
+        ..add(Icon(Icons.timer_outlined, size: 11, color: const Color(0xFFEF4444)))
+        ..add(const SizedBox(width: 2))
+        ..add(Text(
+          waypoint.cutoff!,
+          style: const TextStyle(
+            fontSize: 11,
+            color: Color(0xFFEF4444),
+            fontWeight: FontWeight.w600,
           ),
         ));
     }
@@ -892,6 +951,7 @@ class _ClimbsList extends StatelessWidget {
             return _ClimbTile(
               climb: climbs[index],
               index: index,
+              activity: provider.activityType,
             );
           },
         );
@@ -943,17 +1003,23 @@ class _ClimbsEmpty extends StatelessWidget {
 }
 
 class _ClimbTile extends StatelessWidget {
-  const _ClimbTile({required this.climb, required this.index});
+  const _ClimbTile({
+    required this.climb,
+    required this.index,
+    required this.activity,
+  });
 
   final Climb climb;
   final int index;
+  final ActivityType activity;
 
   @override
   Widget build(BuildContext context) {
     final avgPct = climb.averageGrade * 100;
     final maxPct = climb.maxGrade * 100;
-    final gradeColor = _gradeColor(avgPct);
-    final categoryColor = _categoryColor(climb.category);
+    final gradeColor = _gradeColor(avgPct, activity);
+    final category = climb.categoryFor(activity);
+    final categoryColor = _categoryColor(category);
     final provider = context.read<GpxProvider>();
 
     return MouseRegion(
@@ -1025,7 +1091,7 @@ class _ClimbTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  climb.category.label,
+                  category.label,
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
@@ -1070,7 +1136,7 @@ class _ClimbTile extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: _gradeColor(maxPct),
+                  color: _gradeColor(maxPct, activity),
                 ),
               ),
               const SizedBox(width: 10),
@@ -1092,14 +1158,26 @@ class _ClimbTile extends StatelessWidget {
     );
   }
 
-  /// Grade color matching what most cycling/running apps use: green up
-  /// to ~4%, yellow to 7%, orange to 10%, red to 15%, dark red beyond.
-  static Color _gradeColor(double pct) {
-    if (pct < 4) return const Color(0xFF22C55E);
-    if (pct < 7) return const Color(0xFFEAB308);
-    if (pct < 10) return const Color(0xFFF97316);
-    if (pct < 15) return const Color(0xFFEF4444);
-    return const Color(0xFF991B1B);
+  /// Grade color ramp. Cycling thresholds are tighter (anything > 7% is
+  /// orange) because road riders rarely sustain steeper grades, while
+  /// trail runners regularly hike pitches over 15% — so we shift the
+  /// ramp upward for trail running so a normal trail climb still reads
+  /// "moderate" rather than "very steep".
+  static Color _gradeColor(double pct, ActivityType activity) {
+    switch (activity) {
+      case ActivityType.bike:
+        if (pct < 4) return const Color(0xFF22C55E);
+        if (pct < 7) return const Color(0xFFEAB308);
+        if (pct < 10) return const Color(0xFFF97316);
+        if (pct < 15) return const Color(0xFFEF4444);
+        return const Color(0xFF991B1B);
+      case ActivityType.trailRun:
+        if (pct < 6) return const Color(0xFF22C55E);
+        if (pct < 10) return const Color(0xFFEAB308);
+        if (pct < 15) return const Color(0xFFF97316);
+        if (pct < 22) return const Color(0xFFEF4444);
+        return const Color(0xFF991B1B);
+    }
   }
 
   static Color _categoryColor(ClimbCategory c) {
@@ -1113,6 +1191,16 @@ class _ClimbTile extends StatelessWidget {
       case ClimbCategory.cat1:
         return const Color(0xFFF97316);
       case ClimbCategory.hc:
+        return const Color(0xFFEF4444);
+      case ClimbCategory.easy:
+        return const Color(0xFF22C55E);
+      case ClimbCategory.moderate:
+        return const Color(0xFF0EA5E9);
+      case ClimbCategory.hard:
+        return const Color(0xFF8B5CF6);
+      case ClimbCategory.veryHard:
+        return const Color(0xFFF97316);
+      case ClimbCategory.brutal:
         return const Color(0xFFEF4444);
     }
   }
@@ -1214,6 +1302,7 @@ class _SplitsList extends StatelessWidget {
             icon: WaypointIcons.iconFor(wpt.type),
             offTrack:
                 nearest.distanceToLineMeters > GpxProvider.snapTolerance,
+            cutoff: wpt.cutoff,
           ));
         }
         rows.sort((a, b) => a.distance.compareTo(b.distance));
@@ -1331,14 +1420,47 @@ class _SplitsList extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
-                                  child: Text(
-                                    row.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                    ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        row.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      if (row.cutoff != null &&
+                                          row.cutoff!.isNotEmpty)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 1,
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(
+                                                Icons.timer_outlined,
+                                                size: 11,
+                                                color: Color(0xFFEF4444),
+                                              ),
+                                              const SizedBox(width: 3),
+                                              Text(
+                                                'cutoff ${row.cutoff!}',
+                                                style: const TextStyle(
+                                                  fontSize: 10.5,
+                                                  color: Color(0xFFEF4444),
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                 ),
                               ],
@@ -1430,6 +1552,7 @@ class _SplitRow {
     required this.color,
     required this.icon,
     required this.offTrack,
+    this.cutoff,
   });
 
   final String name;
@@ -1437,4 +1560,5 @@ class _SplitRow {
   final Color color;
   final IconData icon;
   final bool offTrack;
+  final String? cutoff;
 }

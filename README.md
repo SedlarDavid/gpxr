@@ -5,10 +5,10 @@
 [![Built with Flutter](https://img.shields.io/badge/built%20with-Flutter-02569B?logo=flutter)](https://flutter.dev)
 
 A lightweight GPX route editor for the web, built with Flutter. Designed
-for trail runners and hikers who want to plan, tweak and annotate GPX
-tracks from their browser without installing anything. Tracks are
-parsed, edited and exported entirely client-side — your files never
-leave your browser.
+for trail runners, hikers and cyclists who want to plan, tweak and
+annotate GPX tracks from their browser without installing anything.
+Tracks are parsed, edited and exported entirely client-side — your
+files never leave your browser. Works on desktop and mobile.
 
 **Live at <https://gpxr.sedlardavid.cz>.**
 
@@ -20,6 +20,8 @@ leave your browser.
 - Reverse route direction in one click
 - Smart insert: click near the track and the new point is placed on
   the closest segment instead of at the end
+- Responsive layout: side-by-side editor on desktop, draggable bottom
+  panel on phones
 
 ### Waypoints
 - Rich set of built-in types: aid station, medical, water, food,
@@ -28,6 +30,13 @@ leave your browser.
   course (Garmin course-point compatible on export)
 - Stacked markers when multiple waypoints share a location, rendered
   with a small vertical offset so they're all visible and clickable
+- **Add by km**: enter a distance from the race brief instead of
+  hunting for the spot on the map (Tools → Add waypoint by km)
+- **Cutoff times**: optional per-waypoint cutoff (e.g. `12:30` or
+  `4:15:00`) shown in the waypoint list and splits table, round-tripped
+  through GPX `<extensions>` so other tools just ignore them
+- **Auto-create from climbs**: one-click summit waypoints at the top of
+  every detected hill (Tools → Auto-create waypoints from climbs)
 - GPX `<sym>` / `<type>` symbols preserved so Garmin Connect maps them
   to the right course-point icons on your watch
 
@@ -40,10 +49,15 @@ leave your browser.
   GPS jitter inflating your elevation gain by 30%)
 - **Climbs tab**: automatic detection of every significant hill on the
   track, with length, gain, average grade, max grade (over a 100 m
-  sliding window) and a cycling-style category badge (Cat 4 → HC).
-  Hovering a climb highlights its extent on the map
+  sliding window) and a difficulty badge. Hovering a climb highlights
+  its extent on the map
+- **Activity profile** (Trail run / Bike): drives climb category
+  thresholds and grade-color ramps. Trail-running mode treats a 10%
+  pitch as moderate; bike mode keeps the FIETS-based Cat 4 → HC scale
+  and tighter grade colors. The choice is persisted in localStorage
 - **Splits tab**: race-brief style table of waypoints with cumulative
-  distance from start and leg distance to the next point
+  distance from start, leg distance to the next point and the cutoff
+  time when set
 
 ### Trace de Trail import
 - Auto-detected on import: if the GPX metadata links back to a

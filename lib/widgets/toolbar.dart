@@ -5,9 +5,16 @@ import 'package:file_picker/file_picker.dart';
 import 'package:web/web.dart' as web;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/gpx_models.dart';
 import '../providers/gpx_provider.dart';
 import '../services/tracedetrail_importer.dart';
 import '../utils/theme.dart';
+import 'add_waypoint_by_distance_dialog.dart';
+
+/// Width below which edit-mode toggles drop their text labels and stay
+/// icon-only. The toolbar middle row is always horizontally scrollable
+/// so it can never overflow regardless of width.
+const double _compactBreakpoint = 760;
 
 class Toolbar extends StatelessWidget {
   const Toolbar({super.key});
@@ -16,157 +23,400 @@ class Toolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<GpxProvider>(
       builder: (context, provider, _) {
-        return Container(
-          height: 56,
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < _compactBreakpoint;
+            return Container(
+              height: 56,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: _buildToolbarContent(context, provider, compact),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildToolbarContent(
+    BuildContext context,
+    GpxProvider provider,
+    bool compact,
+  ) {
+    final smallGap = SizedBox(width: compact ? 2 : 4);
+
+    // Hamburger opens the Scaffold drawer where file ops + bulk tools
+    // live. Keeping the toolbar slim was the user's explicit ask — too
+    // many top-bar icons were overflowing on mid-width windows.
+    final hamburger = Builder(
+      builder: (ctx) => IconButton(
+        icon: const Icon(Icons.menu_rounded),
+        tooltip: 'Menu',
+        visualDensity: VisualDensity.compact,
+        onPressed: () => Scaffold.of(ctx).openDrawer(),
+      ),
+    );
+
+    final logo = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 32,
+          height: 32,
           decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppTheme.primaryColor, AppTheme.trackColorAlt],
+            ),
+            borderRadius: BorderRadius.circular(8),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              // Logo / Title
-              Row(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [AppTheme.primaryColor, AppTheme.trackColorAlt],
-                      ),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.route_rounded,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  const Text(
-                    'GPXR',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 24),
-              // File actions
-              _ToolbarButton(
-                icon: Icons.add_rounded,
-                label: 'New',
-                onTap: () => _confirmNew(context, provider),
-              ),
-              const SizedBox(width: 4),
-              _ToolbarButton(
-                icon: Icons.file_open_rounded,
-                label: 'Import',
-                onTap: () => _importFile(context, provider),
-              ),
-              const SizedBox(width: 4),
-              _ToolbarButton(
-                icon: Icons.download_rounded,
-                label: 'Export',
-                onTap: provider.hasData
-                    ? () => _exportFile(context, provider)
-                    : null,
-              ),
-              const SizedBox(width: 4),
-              _ToolbarMenu(
-                enabled: provider.hasData,
-                items: [
-                  _ToolbarMenuItem(
-                    icon: Icons.public_rounded,
-                    label: 'Import waypoints from Trace de Trail',
-                    onTap: () =>
-                        _importTraceDeTrailWaypoints(context, provider),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 16),
+          child: const Icon(
+            Icons.route_rounded,
+            color: Colors.white,
+            size: 18,
+          ),
+        ),
+        if (!compact) ...[
+          const SizedBox(width: 10),
+          const Text(
+            'GPXR',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+            ),
+          ),
+        ],
+      ],
+    );
+
+    // Edit mode toggles + activity + visibility — these stay in the
+    // toolbar because they're the actions used multiple times per
+    // editing session. Wrapped in a horizontal scroll view so we can
+    // never overflow even on cramped widths.
+    final scrollableMiddle = Expanded(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _ToolbarToggle(
+              icon: Icons.pan_tool_rounded,
+              label: 'View',
+              isActive: provider.editMode == EditMode.view,
+              onTap: provider.hasData
+                  ? () => provider.setEditMode(EditMode.view)
+                  : null,
+              compact: compact,
+            ),
+            smallGap,
+            _ToolbarToggle(
+              icon: Icons.add_location_alt_rounded,
+              label: 'Add Point',
+              isActive: provider.editMode == EditMode.addPoint,
+              onTap: provider.hasData
+                  ? () => provider.setEditMode(EditMode.addPoint)
+                  : null,
+              compact: compact,
+            ),
+            smallGap,
+            _ToolbarToggle(
+              icon: Icons.add_location_rounded,
+              label: 'Add Waypoint',
+              isActive: provider.editMode == EditMode.addWaypoint,
+              onTap: provider.hasData
+                  ? () => provider.setEditMode(EditMode.addWaypoint)
+                  : null,
+              compact: compact,
+            ),
+            smallGap,
+            _ToolbarToggle(
+              icon: Icons.delete_outline_rounded,
+              label: 'Delete',
+              isActive: provider.editMode == EditMode.deletePoint,
+              onTap: provider.hasData
+                  ? () => provider.setEditMode(EditMode.deletePoint)
+                  : null,
+              activeColor: const Color(0xFFEF4444),
+              compact: compact,
+            ),
+            const SizedBox(width: 12),
+            Container(width: 1, height: 24, color: AppTheme.borderColor),
+            const SizedBox(width: 12),
+            _ActivityToggle(
+              current: provider.activityType,
+              onChanged: provider.setActivityType,
+              compact: compact,
+            ),
+            if (provider.hasData) ...[
+              const SizedBox(width: 12),
               Container(width: 1, height: 24, color: AppTheme.borderColor),
-              const SizedBox(width: 16),
-              // Edit tools
-              _ToolbarToggle(
-                icon: Icons.pan_tool_rounded,
-                label: 'View',
-                isActive: provider.editMode == EditMode.view,
-                onTap: provider.hasData
-                    ? () => provider.setEditMode(EditMode.view)
-                    : null,
+              const SizedBox(width: 12),
+              _ToolbarCheck(
+                icon: Icons.flag_rounded,
+                label: 'Waypoints',
+                isChecked: provider.showWaypoints,
+                onTap: provider.toggleWaypoints,
+                compact: compact,
               ),
-              const SizedBox(width: 4),
-              _ToolbarToggle(
-                icon: Icons.add_location_alt_rounded,
-                label: 'Add Point',
-                isActive: provider.editMode == EditMode.addPoint,
-                onTap: provider.hasData
-                    ? () => provider.setEditMode(EditMode.addPoint)
-                    : null,
-              ),
-              const SizedBox(width: 4),
-              _ToolbarToggle(
-                icon: Icons.add_location_rounded,
-                label: 'Add Waypoint',
-                isActive: provider.editMode == EditMode.addWaypoint,
-                onTap: provider.hasData
-                    ? () => provider.setEditMode(EditMode.addWaypoint)
-                    : null,
-              ),
-              const SizedBox(width: 4),
-              _ToolbarToggle(
-                icon: Icons.delete_outline_rounded,
-                label: 'Delete',
-                isActive: provider.editMode == EditMode.deletePoint,
-                onTap: provider.hasData
-                    ? () => provider.setEditMode(EditMode.deletePoint)
-                    : null,
-                activeColor: const Color(0xFFEF4444),
-              ),
-              const SizedBox(width: 16),
-              Container(width: 1, height: 24, color: AppTheme.borderColor),
-              const SizedBox(width: 16),
-              _ToolbarButton(
-                icon: Icons.swap_horiz_rounded,
-                label: 'Reverse',
-                onTap: provider.hasData ? provider.reverseRoute : null,
-              ),
-              const Spacer(),
-              // Toggles
-              if (provider.hasData) ...[
-                _ToolbarCheck(
-                  icon: Icons.flag_rounded,
-                  label: 'Waypoints',
-                  isChecked: provider.showWaypoints,
-                  onTap: provider.toggleWaypoints,
-                ),
-                const SizedBox(width: 4),
-                _ToolbarCheck(
-                  icon: Icons.circle,
-                  label: 'Track pts',
-                  isChecked: provider.showTrackPoints,
-                  onTap: provider.toggleTrackPoints,
-                  iconSize: 10,
-                ),
-                const SizedBox(width: 16),
-                Container(width: 1, height: 24, color: AppTheme.borderColor),
-                const SizedBox(width: 16),
-              ],
-              _ToolbarButton(
-                icon: Icons.lightbulb_outline_rounded,
-                label: 'Request feature',
-                onTap: _openFeatureRequest,
+              smallGap,
+              _ToolbarCheck(
+                icon: Icons.circle,
+                label: 'Track pts',
+                isChecked: provider.showTrackPoints,
+                onTap: provider.toggleTrackPoints,
+                iconSize: 10,
+                compact: compact,
               ),
             ],
+          ],
+        ),
+      ),
+    );
+
+    return Row(
+      children: [
+        hamburger,
+        const SizedBox(width: 4),
+        logo,
+        const SizedBox(width: 12),
+        scrollableMiddle,
+      ],
+    );
+  }
+}
+
+/// Side drawer hosting the file actions (new / import / export) and the
+/// bulk-edit tools (Trace de Trail import, auto-waypoints from climbs,
+/// reverse, request feature). Toolbar opens it via a hamburger so the
+/// top bar stays slim — too many top-bar actions were the user's
+/// explicit complaint.
+class GpxDrawer extends StatelessWidget {
+  const GpxDrawer({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<GpxProvider>(
+      builder: (context, provider, _) {
+        final hasData = provider.hasData;
+        return Drawer(
+          width: 320,
+          child: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              AppTheme.primaryColor,
+                              AppTheme.trackColorAlt,
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.route_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Text(
+                        'GPXR',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    children: [
+                      _DrawerSection(label: 'File'),
+                      _DrawerItem(
+                        icon: Icons.add_rounded,
+                        label: 'New route',
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          _confirmNew(context, provider);
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: Icons.file_open_rounded,
+                        label: 'Import GPX…',
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          _importFile(context, provider);
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: Icons.download_rounded,
+                        label: 'Export GPX',
+                        enabled: hasData,
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          _exportFile(context, provider);
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      _DrawerSection(label: 'Waypoints'),
+                      _DrawerItem(
+                        icon: Icons.straighten_rounded,
+                        label: 'Add by km…',
+                        enabled: hasData,
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          showAddWaypointByDistanceDialog(context, provider);
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: Icons.landscape_rounded,
+                        label: 'Auto-create from climbs',
+                        enabled: hasData,
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          _autoWaypointsFromClimbs(context, provider);
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: Icons.public_rounded,
+                        label: 'Import from Trace de Trail…',
+                        enabled: hasData,
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          _importTraceDeTrailWaypoints(context, provider);
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      _DrawerSection(label: 'Route'),
+                      _DrawerItem(
+                        icon: Icons.swap_horiz_rounded,
+                        label: 'Reverse direction',
+                        enabled: hasData,
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          provider.reverseRoute();
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      const Divider(height: 1),
+                      _DrawerItem(
+                        icon: Icons.lightbulb_outline_rounded,
+                        label: 'Request a feature',
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          _openFeatureRequest();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
+    );
+  }
+}
+
+class _DrawerSection extends StatelessWidget {
+  const _DrawerSection({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Text(
+        label.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.8,
+          color: AppTheme.textSecondary,
+        ),
+      ),
+    );
+  }
+}
+
+class _DrawerItem extends StatelessWidget {
+  const _DrawerItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.enabled = true,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = enabled
+        ? AppTheme.textPrimary
+        : AppTheme.textSecondary.withValues(alpha: 0.4);
+    return ListTile(
+      leading: Icon(icon, size: 20, color: fg),
+      title: Text(
+        label,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: fg,
+        ),
+      ),
+      onTap: enabled ? onTap : null,
+      dense: true,
+      visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+Future<void> _autoWaypointsFromClimbs(
+  BuildContext context,
+  GpxProvider provider,
+) async {
+    final added = provider.autoWaypointsFromClimbs();
+    if (!context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    if (added == 0) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('No new climbs found to mark'),
+          backgroundColor: Color(0xFFF59E0B),
+        ),
+      );
+      return;
+    }
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Added $added summit waypoint${added == 1 ? '' : 's'}',
+        ),
+        backgroundColor: const Color(0xFF22C55E),
+        duration: const Duration(seconds: 3),
+      ),
     );
   }
 
@@ -484,32 +734,54 @@ class Toolbar extends StatelessWidget {
       );
     }
   }
-}
 
-class _ToolbarButton extends StatelessWidget {
-  const _ToolbarButton({
-    required this.icon,
-    required this.label,
-    this.onTap,
+class _ActivityToggle extends StatelessWidget {
+  const _ActivityToggle({
+    required this.current,
+    required this.onChanged,
     this.compact = false,
   });
 
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
+  final ActivityType current;
+  final ValueChanged<ActivityType> onChanged;
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    final enabled = onTap != null;
     return Tooltip(
-      message: label,
+      message:
+          'Activity type — drives climb grading and grade colors. '
+          'Trail running uses steeper thresholds than cycling.',
       child: Material(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
+        child: PopupMenuButton<ActivityType>(
+          tooltip: '',
+          position: PopupMenuPosition.under,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          onSelected: onChanged,
+          itemBuilder: (ctx) => [
+            for (final t in ActivityType.values)
+              CheckedPopupMenuItem<ActivityType>(
+                value: t,
+                checked: current == t,
+                child: Row(
+                  children: [
+                    Icon(
+                      t == ActivityType.bike
+                          ? Icons.directions_bike_rounded
+                          : Icons.directions_run_rounded,
+                      size: 16,
+                      color: AppTheme.textPrimary,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(t.label),
+                  ],
+                ),
+              ),
+          ],
           child: Padding(
             padding: EdgeInsets.symmetric(
               horizontal: compact ? 8 : 10,
@@ -518,100 +790,30 @@ class _ToolbarButton extends StatelessWidget {
             child: Row(
               children: [
                 Icon(
-                  icon,
+                  current == ActivityType.bike
+                      ? Icons.directions_bike_rounded
+                      : Icons.directions_run_rounded,
                   size: 16,
-                  color: enabled
-                      ? AppTheme.textPrimary
-                      : AppTheme.textSecondary.withValues(alpha: 0.4),
+                  color: AppTheme.primaryColor,
                 ),
                 if (!compact) ...[
                   const SizedBox(width: 6),
                   Text(
-                    label,
+                    current.label,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
-                      color: enabled
-                          ? AppTheme.textPrimary
-                          : AppTheme.textSecondary.withValues(alpha: 0.4),
+                      color: AppTheme.textPrimary,
                     ),
+                  ),
+                  Icon(
+                    Icons.arrow_drop_down_rounded,
+                    size: 18,
+                    color: AppTheme.textSecondary,
                   ),
                 ],
               ],
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ToolbarMenuItem {
-  const _ToolbarMenuItem({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-}
-
-class _ToolbarMenu extends StatelessWidget {
-  const _ToolbarMenu({required this.enabled, required this.items});
-
-  final bool enabled;
-  final List<_ToolbarMenuItem> items;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = enabled
-        ? AppTheme.textPrimary
-        : AppTheme.textSecondary.withValues(alpha: 0.4);
-    return Tooltip(
-      message: 'More tools',
-      child: PopupMenuButton<int>(
-        enabled: enabled,
-        tooltip: '',
-        position: PopupMenuPosition.under,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        itemBuilder: (ctx) => [
-          for (var i = 0; i < items.length; i++)
-            PopupMenuItem<int>(
-              value: i,
-              child: Row(
-                children: [
-                  Icon(items[i].icon, size: 16, color: AppTheme.textPrimary),
-                  const SizedBox(width: 10),
-                  Text(
-                    items[i].label,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-        onSelected: (i) => items[i].onTap(),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          child: Row(
-            children: [
-              Icon(Icons.build_rounded, size: 16, color: color),
-              const SizedBox(width: 6),
-              Text(
-                'Tools',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: color,
-                ),
-              ),
-              Icon(Icons.arrow_drop_down_rounded, size: 18, color: color),
-            ],
           ),
         ),
       ),
@@ -626,6 +828,7 @@ class _ToolbarToggle extends StatelessWidget {
     required this.isActive,
     this.onTap,
     this.activeColor,
+    this.compact = false,
   });
 
   final IconData icon;
@@ -633,6 +836,7 @@ class _ToolbarToggle extends StatelessWidget {
   final bool isActive;
   final VoidCallback? onTap;
   final Color? activeColor;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -648,7 +852,10 @@ class _ToolbarToggle extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(8),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 8 : 10,
+              vertical: 6,
+            ),
             child: Row(
               children: [
                 Icon(
@@ -660,19 +867,21 @@ class _ToolbarToggle extends StatelessWidget {
                       ? color
                       : AppTheme.textSecondary,
                 ),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                    color: !enabled
-                        ? AppTheme.textSecondary.withValues(alpha: 0.4)
-                        : isActive
-                        ? color
-                        : AppTheme.textPrimary,
+                if (!compact) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                      color: !enabled
+                          ? AppTheme.textSecondary.withValues(alpha: 0.4)
+                          : isActive
+                          ? color
+                          : AppTheme.textPrimary,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -721,6 +930,7 @@ class _ToolbarCheck extends StatelessWidget {
     required this.isChecked,
     required this.onTap,
     this.iconSize,
+    this.compact = false,
   });
 
   final IconData icon;
@@ -728,6 +938,7 @@ class _ToolbarCheck extends StatelessWidget {
   final bool isChecked;
   final VoidCallback onTap;
   final double? iconSize;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -740,7 +951,10 @@ class _ToolbarCheck extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(8),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 6 : 8,
+              vertical: 6,
+            ),
             child: Row(
               children: [
                 Icon(
@@ -750,17 +964,19 @@ class _ToolbarCheck extends StatelessWidget {
                       ? AppTheme.primaryColor
                       : AppTheme.textSecondary.withValues(alpha: 0.4),
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: isChecked
-                        ? AppTheme.textPrimary
-                        : AppTheme.textSecondary.withValues(alpha: 0.6),
+                if (!compact) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: isChecked
+                          ? AppTheme.textPrimary
+                          : AppTheme.textSecondary.withValues(alpha: 0.6),
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),

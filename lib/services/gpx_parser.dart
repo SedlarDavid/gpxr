@@ -59,6 +59,7 @@ class GpxParser {
       builder.attribute('xmlns', 'http://www.topografix.com/GPX/1/1');
       builder.attribute(
         'xmlns:xsi', 'http://www.w3.org/2001/XMLSchema-instance');
+      builder.attribute('xmlns:gpxr', 'https://gpxr.app/xmlns/v1');
       builder.attribute('xsi:schemaLocation',
         'http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd');
 
@@ -126,6 +127,20 @@ class GpxParser {
       resolved = WaypointType.fromSym(type);
     }
 
+    // Custom GPXR extensions: cutoff time. Use a local-name match so we
+    // don't fail on files that omit our namespace declaration.
+    String? cutoff;
+    final ext = el.getElement('extensions');
+    if (ext != null) {
+      for (final child in ext.findAllElements('cutoff')) {
+        final t = child.innerText.trim();
+        if (t.isNotEmpty) {
+          cutoff = t;
+          break;
+        }
+      }
+    }
+
     return GpxWaypoint(
       latLng: LatLng(lat, lon),
       elevation: ele,
@@ -133,6 +148,7 @@ class GpxParser {
       description: desc,
       type: resolved,
       time: timeStr != null ? DateTime.tryParse(timeStr) : null,
+      cutoff: cutoff,
     );
   }
 
@@ -195,6 +211,11 @@ class GpxParser {
       // name/cmt/desc/src/link.
       builder.element('sym', nest: wpt.type.sym);
       builder.element('type', nest: wpt.type.gpxType);
+      if (wpt.cutoff != null && wpt.cutoff!.isNotEmpty) {
+        builder.element('extensions', nest: () {
+          builder.element('gpxr:cutoff', nest: wpt.cutoff);
+        });
+      }
     });
   }
 

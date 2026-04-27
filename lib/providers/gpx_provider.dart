@@ -1,12 +1,46 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show Color;
 import 'package:latlong2/latlong.dart';
+import 'package:web/web.dart' as web;
 import '../models/gpx_models.dart';
 import '../services/gpx_parser.dart';
+import '../utils/climb_detector.dart';
 import '../utils/elevation_profile.dart';
+import '../utils/geo_utils.dart';
 
 enum EditMode { view, addPoint, addWaypoint, deletePoint }
 
+const _activityStorageKey = 'gpxr.activity.v1';
+const _routeColorStorageKey = 'gpxr.routeColor.v1';
+
+/// Palette of route colors offered in the map's color picker. The first
+/// entry is the default — picked to be a Strava-style red so the track
+/// stays visible over the magenta-dashed tourist trails on the Mapy.com
+/// outdoor layer (and the indigo we used before blended right in).
+const List<Color> kRouteColorPresets = [
+  Color(0xFFE11900), // strava red (default)
+  Color(0xFFEF4444), // bright red
+  Color(0xFFF97316), // orange
+  Color(0xFFFFC107), // amber
+  Color(0xFF22C55E), // green
+  Color(0xFF06B6D4), // cyan
+  Color(0xFF2563EB), // blue
+  Color(0xFF6366F1), // indigo (legacy default)
+  Color(0xFF8B5CF6), // violet
+  Color(0xFF111827), // near-black
+];
+
 class GpxProvider extends ChangeNotifier {
+  GpxProvider() {
+    final activity = web.window.localStorage.getItem(_activityStorageKey);
+    if (activity != null) _activityType = ActivityType.fromName(activity);
+    final color = web.window.localStorage.getItem(_routeColorStorageKey);
+    if (color != null) {
+      final v = int.tryParse(color);
+      if (v != null) _routeColor = Color(v);
+    }
+  }
+
   final GpxParser _parser = GpxParser();
 
   GpxData? _data;
@@ -20,6 +54,30 @@ class GpxProvider extends ChangeNotifier {
 
   WaypointType _selectedWaypointType = WaypointType.generic;
   WaypointType get selectedWaypointType => _selectedWaypointType;
+
+  ActivityType _activityType = ActivityType.trailRun;
+  ActivityType get activityType => _activityType;
+
+  void setActivityType(ActivityType t) {
+    if (_activityType == t) return;
+    _activityType = t;
+    web.window.localStorage.setItem(_activityStorageKey, t.name);
+    notifyListeners();
+  }
+
+  Color _routeColor = kRouteColorPresets.first;
+  Color get routeColor => _routeColor;
+
+  void setRouteColor(Color c) {
+    if (_routeColor == c) return;
+    _routeColor = c;
+    // Color.toARGB32() is the modern replacement for the deprecated
+    // .value getter; storing as a base-10 int keeps the localStorage
+    // entry trivially round-trippable across reloads.
+    web.window.localStorage
+        .setItem(_routeColorStorageKey, c.toARGB32().toString());
+    notifyListeners();
+  }
 
   String? _selectedPointId;
   String? get selectedPointId => _selectedPointId;
@@ -185,7 +243,12 @@ class GpxProvider extends ChangeNotifier {
   }
 
   // Waypoint operations
-  void addWaypoint(LatLng latLng, {String? name, WaypointType? type}) {
+  void addWaypoint(
+    LatLng latLng, {
+    String? name,
+    WaypointType? type,
+    String? cutoff,
+  }) {
     if (_data == null) return;
     // Snap to nearest point on the track when the click lands within the
     // snap tolerance so the resulting GPX can be promoted to Garmin course
@@ -203,9 +266,71 @@ class GpxProvider extends ChangeNotifier {
       elevation: elevation,
       name: name ?? '${(type ?? _selectedWaypointType).label} ${_data!.waypoints.length + 1}',
       type: type ?? _selectedWaypointType,
+      cutoff: cutoff,
     );
     _data!.waypoints.add(wpt);
     notifyListeners();
+  }
+
+  /// Adds a waypoint at the given cumulative distance along the track. Used
+  /// by the "add by km" dialog when a runner has a list of aid stations
+  /// keyed by distance from the race brief and doesn't want to hunt for
+  /// each one on the map.
+  void addWaypointAtDistance(
+    double meters, {
+    String? name,
+    WaypointType? type,
+    String? cutoff,
+  }) {
+    if (_data == null) return;
+    final profile = elevationProfile();
+    if (profile.isEmpty) return;
+    final clamped = meters.clamp(0, profile.totalDistance).toDouble();
+    final sample = profile.sampleAtDistance(clamped);
+    final resolvedType = type ?? _selectedWaypointType;
+    final wpt = GpxWaypoint(
+      latLng: sample.latLng,
+      elevation: sample.elevation,
+      name: name ?? '${resolvedType.label} ${_data!.waypoints.length + 1}',
+      type: resolvedType,
+      cutoff: cutoff,
+    );
+    _data!.waypoints.add(wpt);
+    notifyListeners();
+  }
+
+  /// Walks the climb detector over the current track and creates a Summit
+  /// waypoint at the top of every detected climb that doesn't already have
+  /// a waypoint within ~120 m. Returns the number of waypoints added.
+  int autoWaypointsFromClimbs() {
+    if (_data == null) return 0;
+    final profile = elevationProfile();
+    if (profile.isEmpty || !profile.hasElevation) return 0;
+    final climbs = ClimbDetector.detect(profile);
+    if (climbs.isEmpty) return 0;
+
+    int added = 0;
+    int counter = 1;
+    for (final climb in climbs) {
+      final sample = profile.sampleAtDistance(climb.endDistance);
+      final dup = _data!.waypoints.any((w) {
+        final d = GeoUtils.distanceBetween(w.latLng, sample.latLng);
+        return d < snapTolerance;
+      });
+      if (dup) continue;
+      _data!.waypoints.add(
+        GpxWaypoint(
+          latLng: sample.latLng,
+          elevation: sample.elevation,
+          name: 'Summit $counter (+${climb.gain.round()} m)',
+          type: WaypointType.summit,
+        ),
+      );
+      added++;
+      counter++;
+    }
+    if (added > 0) notifyListeners();
+    return added;
   }
 
   /// Merges [waypoints] (typically scraped from a race page) into the
@@ -279,7 +404,15 @@ class GpxProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateWaypoint(String id, {String? name, String? description, WaypointType? type, LatLng? latLng}) {
+  void updateWaypoint(
+    String id, {
+    String? name,
+    String? description,
+    WaypointType? type,
+    LatLng? latLng,
+    String? cutoff,
+    bool clearCutoff = false,
+  }) {
     if (_data == null) return;
     final idx = _data!.waypoints.indexWhere((w) => w.id == id);
     if (idx == -1) return;
@@ -288,6 +421,8 @@ class GpxProvider extends ChangeNotifier {
       description: description,
       type: type,
       latLng: latLng,
+      cutoff: cutoff,
+      clearCutoff: clearCutoff,
     );
     notifyListeners();
   }

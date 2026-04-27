@@ -1,3 +1,4 @@
+import '../models/gpx_models.dart';
 import 'elevation_profile.dart';
 
 /// A sustained climb detected on an [ElevationProfile]. Start/end are
@@ -40,10 +41,9 @@ class Climb {
     return (gain * gain) / (length * 10);
   }
 
-  /// Human-friendly difficulty label derived from [fietsScore]. Tuned so
-  /// that trail-running climbs (steeper but shorter than road cycling)
-  /// still get meaningful categories.
-  ClimbCategory get category {
+  /// Cycling-style category derived from [fietsScore]. Used when the
+  /// active activity is [ActivityType.bike].
+  ClimbCategory get bikeCategory {
     final s = fietsScore;
     if (s >= 8) return ClimbCategory.hc;
     if (s >= 5) return ClimbCategory.cat1;
@@ -51,14 +51,43 @@ class Climb {
     if (s >= 1.5) return ClimbCategory.cat3;
     return ClimbCategory.cat4;
   }
+
+  /// Trail-runner-friendly category. Trail climbs are shorter and steeper
+  /// than road climbs, so we lean on absolute vertical gain combined with
+  /// average grade rather than the road-cycling FIETS thresholds.
+  ClimbCategory get trailCategory {
+    final g = gain;
+    final pct = averageGrade * 100;
+    if (g >= 800 || (g >= 500 && pct >= 12)) return ClimbCategory.brutal;
+    if (g >= 400 || (g >= 250 && pct >= 12)) return ClimbCategory.veryHard;
+    if (g >= 200 || (g >= 120 && pct >= 10)) return ClimbCategory.hard;
+    if (g >= 80) return ClimbCategory.moderate;
+    return ClimbCategory.easy;
+  }
+
+  ClimbCategory categoryFor(ActivityType activity) {
+    switch (activity) {
+      case ActivityType.bike:
+        return bikeCategory;
+      case ActivityType.trailRun:
+        return trailCategory;
+    }
+  }
 }
 
 enum ClimbCategory {
+  // Cycling categories.
   cat4('Cat 4'),
   cat3('Cat 3'),
   cat2('Cat 2'),
   cat1('Cat 1'),
-  hc('HC');
+  hc('HC'),
+  // Trail-running categories.
+  easy('Easy'),
+  moderate('Moderate'),
+  hard('Hard'),
+  veryHard('Very hard'),
+  brutal('Brutal');
 
   const ClimbCategory(this.label);
   final String label;

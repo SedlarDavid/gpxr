@@ -48,11 +48,13 @@ class _WelcomeDialogState extends State<_WelcomeDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final dialogWidth = screenWidth < 520 ? screenWidth - 48 : 460.0;
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
       content: SizedBox(
-        width: 460,
+        width: dialogWidth,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

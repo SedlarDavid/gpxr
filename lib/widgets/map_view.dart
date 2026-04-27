@@ -277,6 +277,7 @@ class _MapViewState extends State<MapView> {
   void _showAddWaypointDialog(LatLng latLng) {
     final provider = context.read<GpxProvider>();
     final nameController = TextEditingController();
+    final cutoffController = TextEditingController();
     WaypointType selectedType = provider.selectedWaypointType;
 
     showDialog(
@@ -298,6 +299,14 @@ class _MapViewState extends State<MapView> {
                     hintText: 'e.g. Aid Station 1',
                   ),
                   autofocus: true,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: cutoffController,
+                  decoration: const InputDecoration(
+                    labelText: 'Cutoff (optional)',
+                    hintText: '12:30 or 4:15:00',
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Text('Type', style: Theme.of(ctx).textTheme.labelMedium),
@@ -342,7 +351,13 @@ class _MapViewState extends State<MapView> {
                 final name = nameController.text.isEmpty
                     ? '${selectedType.label} ${provider.data!.waypoints.length + 1}'
                     : nameController.text;
-                provider.addWaypoint(latLng, name: name, type: selectedType);
+                final cutoff = cutoffController.text.trim();
+                provider.addWaypoint(
+                  latLng,
+                  name: name,
+                  type: selectedType,
+                  cutoff: cutoff.isEmpty ? null : cutoff,
+                );
                 Navigator.pop(ctx);
               },
               child: const Text('Add'),
@@ -411,7 +426,7 @@ class _MapViewState extends State<MapView> {
                   ),
                   if (data != null) ..._buildTrackLayers(data, provider),
                   if (data != null && profile.length >= 2)
-                    _buildDirectionMarkers(profile),
+                    _buildDirectionMarkers(profile, provider.routeColor),
                   if (data != null && profile.length >= 1)
                     _buildStartFinishMarkers(profile),
                   if (data != null && provider.showWaypoints)
@@ -538,6 +553,11 @@ class _MapViewState extends State<MapView> {
                       onChanged: (v) => setState(() => _layer = v),
                     ),
                     const SizedBox(height: 8),
+                    _RouteColorButton(
+                      current: provider.routeColor,
+                      onChanged: provider.setRouteColor,
+                    ),
+                    const SizedBox(height: 8),
                     if (data != null && allPoints.isNotEmpty) ...[
                       _MapButton(
                         icon: Icons.fit_screen_rounded,
@@ -617,7 +637,10 @@ class _MapViewState extends State<MapView> {
     );
   }
 
-  Widget _buildDirectionMarkers(ElevationProfile profile) {
+  Widget _buildDirectionMarkers(
+    ElevationProfile profile,
+    Color routeColor,
+  ) {
     const maxArrows = 14;
     const minSpacingMeters = 250.0;
     final total = profile.totalDistance;
@@ -644,7 +667,7 @@ class _MapViewState extends State<MapView> {
               child: Icon(
                 Icons.navigation_rounded,
                 size: 16,
-                color: AppTheme.trackColor.withValues(alpha: 0.9),
+                color: routeColor.withValues(alpha: 0.9),
                 shadows: const [
                   Shadow(color: Colors.white, blurRadius: 2),
                 ],
@@ -700,6 +723,12 @@ class _MapViewState extends State<MapView> {
   List<Widget> _buildTrackLayers(GpxData data, GpxProvider provider) {
     final layers = <Widget>[];
 
+    final routeColor = provider.routeColor;
+    // Routes (rte) get a slightly translucent overlay of the same hue so
+    // they remain distinguishable from tracks when both are present,
+    // without forcing the user to think about two separate colors.
+    final routeAltColor = routeColor.withValues(alpha: 0.75);
+
     // Track polylines
     for (final track in data.tracks) {
       for (final seg in track.segments) {
@@ -709,7 +738,7 @@ class _MapViewState extends State<MapView> {
               polylines: [
                 Polyline(
                   points: seg.points.map((p) => p.latLng).toList(),
-                  color: AppTheme.trackColor,
+                  color: routeColor,
                   strokeWidth: 4,
                 ),
               ],
@@ -727,7 +756,7 @@ class _MapViewState extends State<MapView> {
             polylines: [
               Polyline(
                 points: route.points.map((p) => p.latLng).toList(),
-                color: AppTheme.trackColorAlt,
+                color: routeAltColor,
                 strokeWidth: 4,
               ),
             ],
@@ -983,6 +1012,111 @@ class _TrianglePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _RouteColorButton extends StatelessWidget {
+  const _RouteColorButton({required this.current, required this.onChanged});
+
+  final Color current;
+  final ValueChanged<Color> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(8),
+      elevation: 2,
+      child: SizedBox(
+        width: 36,
+        height: 36,
+        child: PopupMenuButton<Color>(
+          tooltip: 'Route color',
+          padding: EdgeInsets.zero,
+          position: PopupMenuPosition.under,
+          offset: const Offset(-160, 0),
+          onSelected: onChanged,
+          itemBuilder: (ctx) => [
+            PopupMenuItem<Color>(
+              enabled: false,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Text(
+                'Route color',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textSecondary,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+            PopupMenuItem<Color>(
+              enabled: false,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: kRouteColorPresets.map((c) {
+                  final isActive = c == current;
+                  return InkWell(
+                    onTap: () {
+                      onChanged(c);
+                      Navigator.of(ctx).pop();
+                    },
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: c,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: isActive
+                              ? AppTheme.textPrimary
+                              : Colors.white,
+                          width: isActive ? 2 : 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.12),
+                            blurRadius: 3,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                      child: isActive
+                          ? const Icon(
+                              Icons.check_rounded,
+                              size: 16,
+                              color: Colors.white,
+                            )
+                          : null,
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+          child: Center(
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: current,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.white, width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 2,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _LayerMenuButton extends StatelessWidget {

@@ -3,6 +3,26 @@ import 'package:uuid/uuid.dart';
 
 const _uuid = Uuid();
 
+/// What the user is using GPXR for. Drives climb grading thresholds and
+/// grade-color ramps so a 10% pitch reads "moderate" for a trail runner
+/// and "very steep" for a road cyclist. Persisted in localStorage so the
+/// choice survives reloads.
+enum ActivityType {
+  trailRun('Trail run'),
+  bike('Bike');
+
+  const ActivityType(this.label);
+  final String label;
+
+  static ActivityType fromName(String? name) {
+    if (name == null) return ActivityType.trailRun;
+    for (final t in ActivityType.values) {
+      if (t.name == name) return t;
+    }
+    return ActivityType.trailRun;
+  }
+}
+
 enum WaypointType {
   generic(
     'Generic',
@@ -126,6 +146,7 @@ class GpxWaypoint {
     this.description,
     this.type = WaypointType.generic,
     this.time,
+    this.cutoff,
   }) : id = id ?? _uuid.v4();
 
   final String id;
@@ -136,6 +157,13 @@ class GpxWaypoint {
   final WaypointType type;
   final DateTime? time;
 
+  /// Free-form cutoff string — typically a clock time like "12:30" or an
+  /// elapsed duration like "1:23:45" when an aid station has a hard cut-
+  /// off the runner has to clear by. Round-tripped via the GPX
+  /// `<extensions><gpxr:cutoff>` element so other tools that don't know
+  /// about it ignore it silently.
+  final String? cutoff;
+
   GpxWaypoint copyWith({
     LatLng? latLng,
     double? elevation,
@@ -143,6 +171,8 @@ class GpxWaypoint {
     String? description,
     WaypointType? type,
     DateTime? time,
+    String? cutoff,
+    bool clearCutoff = false,
   }) {
     return GpxWaypoint(
       id: id,
@@ -152,6 +182,7 @@ class GpxWaypoint {
       description: description ?? this.description,
       type: type ?? this.type,
       time: time ?? this.time,
+      cutoff: clearCutoff ? null : (cutoff ?? this.cutoff),
     );
   }
 }
