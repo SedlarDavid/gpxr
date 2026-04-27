@@ -35,7 +35,7 @@ class _ProfileDetailViewState extends State<ProfileDetailView>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -113,12 +113,15 @@ class _ProfileDetailViewState extends State<ProfileDetailView>
                       waypointTicks: ticks,
                       height: chartHeight,
                       highlightRange: provider.hoveredClimbRange,
+                      descentHighlightRange: provider.hoveredDescentRange,
                     ),
                   ),
                   _HoverReadout(profile: profile, provider: provider),
                   const Divider(height: 1),
                   TabBar(
                     controller: _tabController,
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
                     labelColor: AppTheme.primaryColor,
                     unselectedLabelColor: AppTheme.textSecondary,
                     indicatorColor: AppTheme.primaryColor,
@@ -129,6 +132,7 @@ class _ProfileDetailViewState extends State<ProfileDetailView>
                     ),
                     tabs: const [
                       Tab(text: 'Climbs'),
+                      Tab(text: 'Descents'),
                       Tab(text: 'Splits'),
                       Tab(text: 'Waypoints'),
                     ],
@@ -139,6 +143,7 @@ class _ProfileDetailViewState extends State<ProfileDetailView>
                       controller: _tabController,
                       children: const [
                         ClimbsList(),
+                        DescentsList(),
                         SplitsList(),
                         WaypointsList(),
                       ],

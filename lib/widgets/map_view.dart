@@ -456,6 +456,33 @@ class _MapViewState extends State<MapView> {
                       );
                     },
                   ),
+                  // Descent highlight (active when user hovers a descent
+                  // tile). Orange so it's visually distinct from the red
+                  // climb highlight.
+                  ValueListenableBuilder<(double, double)?>(
+                    valueListenable: provider.hoveredDescentRange,
+                    builder: (context, range, _) {
+                      if (range == null || profile.length < 2) {
+                        return PolylineLayer(polylines: const <Polyline>[]);
+                      }
+                      final (start, end) = range;
+                      final pts = _climbLatLngs(profile, start, end);
+                      if (pts.length < 2) {
+                        return PolylineLayer(polylines: const <Polyline>[]);
+                      }
+                      return PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: pts,
+                            color: const Color(0xFFF97316),
+                            strokeWidth: 6,
+                            borderColor: Colors.white,
+                            borderStrokeWidth: 2,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                   // Hover marker on the route.
                   ValueListenableBuilder<double?>(
                     valueListenable: provider.hoverDistance,

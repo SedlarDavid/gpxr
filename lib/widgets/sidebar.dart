@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/gpx_models.dart';
 import '../providers/gpx_provider.dart';
 import '../utils/climb_detector.dart';
+import '../utils/descent_detector.dart';
 import '../utils/elevation_profile.dart';
 import '../utils/geo_utils.dart';
 import '../utils/theme.dart';
@@ -100,7 +101,7 @@ class _SidebarContentState extends State<_SidebarContent>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -135,6 +136,8 @@ class _SidebarContentState extends State<_SidebarContent>
           const Divider(height: 1),
           TabBar(
             controller: _tabController,
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             labelColor: AppTheme.primaryColor,
             unselectedLabelColor: AppTheme.textSecondary,
             indicatorColor: AppTheme.primaryColor,
@@ -144,6 +147,7 @@ class _SidebarContentState extends State<_SidebarContent>
               Tab(text: 'Points'),
               Tab(text: 'Waypoints'),
               Tab(text: 'Climbs'),
+              Tab(text: 'Descents'),
               Tab(text: 'Splits'),
             ],
           ),
@@ -155,6 +159,7 @@ class _SidebarContentState extends State<_SidebarContent>
                 _TrackPointsList(),
                 WaypointsList(),
                 ClimbsList(),
+                DescentsList(),
                 SplitsList(),
               ],
             ),
@@ -1280,6 +1285,244 @@ class _ClimbStat extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Mirror of [ClimbsList] for descents. Trail runners care about descents
+/// independently of climbs because eccentric quad load and braking on
+/// long downhills (rather than climbing aerobic load) is what actually
+/// limits performance and recovery in long ultras — so a route's
+/// descents deserve their own first-class view.
+class DescentsList extends StatelessWidget {
+  const DescentsList({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<GpxProvider>(
+      builder: (context, provider, _) {
+        final profile = provider.elevationProfile();
+        if (profile.isEmpty || !profile.hasElevation) {
+          return _ClimbsEmpty(
+            icon: Icons.trending_down_rounded,
+            title: 'No elevation data',
+            subtitle: 'Import a GPX with elevation to see descent analysis.',
+          );
+        }
+        final descents = DescentDetector.detect(profile);
+        if (descents.isEmpty) {
+          return _ClimbsEmpty(
+            icon: Icons.trending_down_rounded,
+            title: 'No significant descents',
+            subtitle:
+                'This track is relatively flat — descents under 30 m loss or 300 m length are ignored.',
+          );
+        }
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(0, 4, 0, 64),
+          itemCount: descents.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 2),
+          itemBuilder: (context, index) {
+            return _DescentTile(
+              descent: descents[index],
+              index: index,
+              activity: provider.activityType,
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _DescentTile extends StatelessWidget {
+  const _DescentTile({
+    required this.descent,
+    required this.index,
+    required this.activity,
+  });
+
+  final Descent descent;
+  final int index;
+  final ActivityType activity;
+
+  @override
+  Widget build(BuildContext context) {
+    final avgPct = descent.averageGrade * 100;
+    final maxPct = descent.maxGrade * 100;
+    // Reuse the climb grade ramp — steepness is steepness regardless of
+    // direction, and using the same color palette keeps the visual
+    // language consistent for users scanning between the two tabs.
+    final gradeColor = _ClimbTile._gradeColor(avgPct, activity);
+    final category = descent.categoryFor(activity);
+    final categoryColor = _descentCategoryColor(category);
+    final provider = context.read<GpxProvider>();
+
+    return MouseRegion(
+      onEnter: (_) => provider.hoveredDescentRange.value =
+          (descent.startDistance, descent.endDistance),
+      onExit: (_) => provider.hoveredDescentRange.value = null,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceColor,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: AppTheme.borderColor.withValues(alpha: 0.5),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: gradeColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  child: Text(
+                    '${index + 1}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: gradeColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Descent ${index + 1}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        '${GeoUtils.formatDistance(descent.startDistance)} → '
+                        '${GeoUtils.formatDistance(descent.endDistance)}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Tooltip(
+                  message: activity == ActivityType.trailRun
+                      ? 'Estimated knee impact'
+                      : 'Descent severity',
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: categoryColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      category.label,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: categoryColor,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _ClimbStat(
+                  icon: Icons.straighten_rounded,
+                  label: GeoUtils.formatDistance(descent.length),
+                  tooltip: 'Length',
+                ),
+                const SizedBox(width: 6),
+                _ClimbStat(
+                  icon: Icons.trending_down_rounded,
+                  label: '\u2212${descent.loss.round()} m',
+                  tooltip: 'Elevation loss',
+                  color: const Color(0xFFF97316),
+                ),
+                const SizedBox(width: 6),
+                _ClimbStat(
+                  icon: Icons.show_chart_rounded,
+                  label: '\u2212${avgPct.toStringAsFixed(1)}%',
+                  tooltip: 'Average descent grade',
+                  color: gradeColor,
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(Icons.bolt_rounded, size: 12, color: AppTheme.textSecondary),
+                const SizedBox(width: 3),
+                Text(
+                  'Max \u2212${maxPct.toStringAsFixed(1)}%',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: _ClimbTile._gradeColor(maxPct, activity),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Icon(Icons.height_rounded, size: 12, color: AppTheme.textSecondary),
+                const SizedBox(width: 3),
+                Text(
+                  '${descent.startElevation.round()} → ${descent.endElevation.round()} m',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static Color _descentCategoryColor(DescentCategory c) {
+    switch (c) {
+      case DescentCategory.cat4:
+        return const Color(0xFF64748B);
+      case DescentCategory.cat3:
+        return const Color(0xFF0EA5E9);
+      case DescentCategory.cat2:
+        return const Color(0xFF8B5CF6);
+      case DescentCategory.cat1:
+        return const Color(0xFFF97316);
+      case DescentCategory.hc:
+        return const Color(0xFFEF4444);
+      case DescentCategory.easy:
+        return const Color(0xFF22C55E);
+      case DescentCategory.moderate:
+        return const Color(0xFF0EA5E9);
+      case DescentCategory.hard:
+        return const Color(0xFF8B5CF6);
+      case DescentCategory.veryHard:
+        return const Color(0xFFF97316);
+      case DescentCategory.brutal:
+        return const Color(0xFFEF4444);
+    }
   }
 }
 

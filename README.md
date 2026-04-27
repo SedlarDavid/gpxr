@@ -52,18 +52,26 @@ files never leave your browser. Works on desktop and mobile.
   track, with length, gain, average grade, max grade (over a 100 m
   sliding window) and a difficulty badge. Hovering a climb highlights
   its extent on the map and on the elevation chart
-- **Activity profile** (Trail run / Bike): drives climb category
-  thresholds and grade-color ramps. Trail-running mode treats a 10%
-  pitch as moderate; bike mode keeps the FIETS-based Cat 4 → HC scale
-  and tighter grade colors. The choice is persisted in localStorage
+- **Descents tab**: symmetric counterpart to climbs — every significant
+  downhill is detected with length, loss, average grade, max grade and
+  a difficulty badge. In trail-running mode the badge estimates **knee
+  impact** (eccentric quad load), tuned slightly tighter than the climb
+  ladder because long descents are often the limiting factor in
+  ultras. Hovering a descent paints it orange on the map and on the
+  elevation chart
+- **Activity profile** (Trail run / Bike): drives climb / descent
+  category thresholds and grade-color ramps. Trail-running mode treats
+  a 10% pitch as moderate; bike mode keeps the FIETS-based Cat 4 → HC
+  scale and tighter grade colors. The choice is persisted in
+  localStorage
 - **Splits tab**: race-brief style table of waypoints with cumulative
   distance from start, leg distance to the next point and the cutoff
   time when set
 - **Profile detail view**: tap the expand icon on the small chart to
   open a full-screen detail with a tall interactive profile, hover
-  read-out of distance + elevation, and Climbs / Splits / Waypoints
-  tabs side by side — for inspecting each section of the route
-  without the map competing for attention
+  read-out of distance + elevation, and Climbs / Descents / Splits /
+  Waypoints tabs side by side — for inspecting each section of the
+  route without the map competing for attention
 
 ### Trace de Trail import
 - Auto-detected on import: if the GPX metadata links back to a
@@ -163,11 +171,12 @@ lib/
   utils/
     elevation_profile.dart       distance / elevation / snap math
     climb_detector.dart          hill detection with grade analysis
+    descent_detector.dart        downhill detection + knee-impact scoring
     geo_utils.dart               distance + hysteresis gain / loss
     waypoint_icons.dart          type → icon / color
   widgets/
     toolbar.dart                 file + edit actions
-    sidebar.dart                 stats + points / waypoints / climbs / splits tabs
+    sidebar.dart                 stats + points / waypoints / climbs / descents / splits tabs
     map_view.dart                flutter_map rendering + hover
     elevation_profile_chart.dart interactive profile
     welcome_dialog.dart          first-run intro + Ko-fi link

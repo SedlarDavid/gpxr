@@ -32,6 +32,7 @@ class ElevationProfileChart extends StatelessWidget {
     this.waypointTicks = const [],
     this.height = 96,
     this.highlightRange,
+    this.descentHighlightRange,
   });
 
   final ElevationProfile profile;
@@ -44,8 +45,13 @@ class ElevationProfileChart extends StatelessWidget {
 
   /// Optional (startMeters, endMeters) range to shade as a colored band
   /// behind the curve. Used by the profile detail dialog to show the
-  /// active hovered climb without lighting up the map.
+  /// active hovered climb without lighting up the map. Drawn in red.
   final ValueListenable<(double, double)?>? highlightRange;
+
+  /// Symmetric to [highlightRange] but for hovered descents — drawn in
+  /// orange so the two kinds of segments are visually distinguishable
+  /// even though only one is normally hovered at a time.
+  final ValueListenable<(double, double)?>? descentHighlightRange;
 
   static const double _padH = 8;
   static const double _padTop = 26;
@@ -98,18 +104,25 @@ class ElevationProfileChart extends StatelessWidget {
                   return ValueListenableBuilder<(double, double)?>(
                     valueListenable: highlightRange ??
                         ValueNotifier<(double, double)?>(null),
-                    builder: (context, range, _) {
-                      return CustomPaint(
-                        painter: _ElevationPainter(
-                          profile: profile,
-                          hoverDistance: hoverD,
-                          waypointTicks: waypointTicks,
-                          highlightRange: range,
-                          padH: _padH,
-                          padTop: _padTop,
-                          padBottom: _padBottom,
-                        ),
-                        size: Size.infinite,
+                    builder: (context, climbRange, _) {
+                      return ValueListenableBuilder<(double, double)?>(
+                        valueListenable: descentHighlightRange ??
+                            ValueNotifier<(double, double)?>(null),
+                        builder: (context, descentRange, _) {
+                          return CustomPaint(
+                            painter: _ElevationPainter(
+                              profile: profile,
+                              hoverDistance: hoverD,
+                              waypointTicks: waypointTicks,
+                              highlightRange: climbRange,
+                              descentHighlightRange: descentRange,
+                              padH: _padH,
+                              padTop: _padTop,
+                              padBottom: _padBottom,
+                            ),
+                            size: Size.infinite,
+                          );
+                        },
                       );
                     },
                   );
@@ -132,12 +145,14 @@ class _ElevationPainter extends CustomPainter {
     required this.padTop,
     required this.padBottom,
     this.highlightRange,
+    this.descentHighlightRange,
   });
 
   final ElevationProfile profile;
   final double? hoverDistance;
   final List<WaypointTick> waypointTicks;
   final (double, double)? highlightRange;
+  final (double, double)? descentHighlightRange;
   final double padH;
   final double padTop;
   final double padBottom;
@@ -204,19 +219,28 @@ class _ElevationPainter extends CustomPainter {
     // Highlight band (e.g. hovered climb extent). Drawn under the curve
     // and over the gradient so the band reads as a colored "spotlight"
     // on the relevant section without obscuring the line.
-    if (highlightRange != null) {
-      final (hStart, hEnd) = highlightRange!;
+    void drawBand((double, double) range, Color color) {
+      final (hStart, hEnd) = range;
       final clampedStart = hStart.clamp(0, totalD).toDouble();
       final clampedEnd = hEnd.clamp(0, totalD).toDouble();
-      if (clampedEnd > clampedStart) {
-        final left = xFor(clampedStart);
-        final right = xFor(clampedEnd);
-        final rect = Rect.fromLTRB(left, padTop, right, baselineY);
-        canvas.drawRect(
-          rect,
-          Paint()..color = const Color(0xFFEF4444).withValues(alpha: 0.15),
-        );
-      }
+      if (clampedEnd <= clampedStart) return;
+      final left = xFor(clampedStart);
+      final right = xFor(clampedEnd);
+      final rect = Rect.fromLTRB(left, padTop, right, baselineY);
+      canvas.drawRect(rect, Paint()..color = color);
+    }
+
+    if (highlightRange != null) {
+      drawBand(
+        highlightRange!,
+        const Color(0xFFEF4444).withValues(alpha: 0.15),
+      );
+    }
+    if (descentHighlightRange != null) {
+      drawBand(
+        descentHighlightRange!,
+        const Color(0xFFF97316).withValues(alpha: 0.15),
+      );
     }
 
     // Curve.
@@ -415,6 +439,7 @@ class _ElevationPainter extends CustomPainter {
     return oldDelegate.profile != profile ||
         oldDelegate.hoverDistance != hoverDistance ||
         oldDelegate.highlightRange != highlightRange ||
+        oldDelegate.descentHighlightRange != descentHighlightRange ||
         !_ticksEqual(oldDelegate.waypointTicks, waypointTicks);
   }
 

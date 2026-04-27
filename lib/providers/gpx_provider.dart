@@ -100,6 +100,15 @@ class GpxProvider extends ChangeNotifier {
     null,
   );
 
+  /// (startDistance, endDistance) of the descent currently hovered in
+  /// the sidebar's descents tab. Symmetric counterpart of
+  /// [hoveredClimbRange] — used to spotlight the segment on the map and
+  /// elevation chart so trail runners can see where the knee-punishing
+  /// downhills fall.
+  final ValueNotifier<(double, double)?> hoveredDescentRange = ValueNotifier(
+    null,
+  );
+
   /// Maximum distance (meters) within which a clicked or existing waypoint
   /// is automatically pulled onto the nearest point of the track. Matches
   /// what Garmin Connect typically tolerates when promoting GPX waypoints
@@ -124,6 +133,7 @@ class GpxProvider extends ChangeNotifier {
   void dispose() {
     hoverDistance.dispose();
     hoveredClimbRange.dispose();
+    hoveredDescentRange.dispose();
     super.dispose();
   }
 
