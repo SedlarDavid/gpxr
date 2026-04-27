@@ -192,10 +192,18 @@ class _MobileSidebarPanel extends StatelessWidget {
               ),
             ),
           ),
-          if (expanded)
-            const Expanded(
-              child: Sidebar(mobile: true),
+          if (expanded) ...[
+            const Expanded(child: Sidebar(mobile: true)),
+            // Reserve the iOS home-indicator strip explicitly inside
+            // the panel so the list's last row is never overlapped by
+            // it. We did this with a SafeArea before, but Sidebar's
+            // ListView didn't reliably reach its scroll extent when
+            // wrapped that way — pushing the inset into the panel's
+            // own Column avoids the issue.
+            SizedBox(
+              height: MediaQuery.of(context).viewPadding.bottom,
             ),
+          ],
         ],
       ),
     );

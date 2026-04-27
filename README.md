@@ -31,12 +31,13 @@ files never leave your browser. Works on desktop and mobile.
 - Stacked markers when multiple waypoints share a location, rendered
   with a small vertical offset so they're all visible and clickable
 - **Add by km**: enter a distance from the race brief instead of
-  hunting for the spot on the map (Tools → Add waypoint by km)
+  hunting for the spot on the map (drawer menu → Add by km, or the
+  "Add by km" button on the empty waypoints state)
 - **Cutoff times**: optional per-waypoint cutoff (e.g. `12:30` or
   `4:15:00`) shown in the waypoint list and splits table, round-tripped
   through GPX `<extensions>` so other tools just ignore them
 - **Auto-create from climbs**: one-click summit waypoints at the top of
-  every detected hill (Tools → Auto-create waypoints from climbs)
+  every detected hill (drawer menu → Auto-create from climbs)
 - GPX `<sym>` / `<type>` symbols preserved so Garmin Connect maps them
   to the right course-point icons on your watch
 
@@ -50,7 +51,7 @@ files never leave your browser. Works on desktop and mobile.
 - **Climbs tab**: automatic detection of every significant hill on the
   track, with length, gain, average grade, max grade (over a 100 m
   sliding window) and a difficulty badge. Hovering a climb highlights
-  its extent on the map
+  its extent on the map and on the elevation chart
 - **Activity profile** (Trail run / Bike): drives climb category
   thresholds and grade-color ramps. Trail-running mode treats a 10%
   pitch as moderate; bike mode keeps the FIETS-based Cat 4 → HC scale
@@ -58,6 +59,11 @@ files never leave your browser. Works on desktop and mobile.
 - **Splits tab**: race-brief style table of waypoints with cumulative
   distance from start, leg distance to the next point and the cutoff
   time when set
+- **Profile detail view**: tap the expand icon on the small chart to
+  open a full-screen detail with a tall interactive profile, hover
+  read-out of distance + elevation, and Climbs / Splits / Waypoints
+  tabs side by side — for inspecting each section of the route
+  without the map competing for attention
 
 ### Trace de Trail import
 - Auto-detected on import: if the GPX metadata links back to a
@@ -77,6 +83,10 @@ files never leave your browser. Works on desktop and mobile.
   Mapy.com outdoor, and more)
 - Hover-aware track highlighting with screen-space caching so 50 km+
   tracks stay smooth
+- **Route color picker**: 10-swatch palette (Strava red default) so
+  the track stays readable on top of busy basemaps (e.g. the magenta
+  tourist-trail dashes on the Mapy.com outdoor layer). Choice is
+  persisted in localStorage
 
 ## Running locally
 

@@ -9,6 +9,7 @@ import '../utils/theme.dart';
 import '../utils/waypoint_icons.dart';
 import 'add_waypoint_by_distance_dialog.dart';
 import 'elevation_profile_chart.dart';
+import 'profile_detail_view.dart';
 
 class Sidebar extends StatelessWidget {
   const Sidebar({super.key, this.mobile = false});
@@ -152,9 +153,9 @@ class _SidebarContentState extends State<_SidebarContent>
               controller: _tabController,
               children: const [
                 _TrackPointsList(),
-                _WaypointsList(),
-                _ClimbsList(),
-                _SplitsList(),
+                WaypointsList(),
+                ClimbsList(),
+                SplitsList(),
               ],
             ),
           ),
@@ -268,10 +269,40 @@ class _RouteStats extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              ElevationProfileChart(
-                profile: profile,
-                hoverDistance: provider.hoverDistance,
-                waypointTicks: ticks,
+              Stack(
+                children: [
+                  ElevationProfileChart(
+                    profile: profile,
+                    hoverDistance: provider.hoverDistance,
+                    waypointTicks: ticks,
+                  ),
+                  // Launcher for the full-screen profile detail view —
+                  // small enough to not steal cursor area on the chart,
+                  // but visible so the feature is discoverable.
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: Material(
+                      color: Colors.white.withValues(alpha: 0.92),
+                      borderRadius: BorderRadius.circular(6),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(6),
+                        onTap: () => showProfileDetailDialog(context),
+                        child: Tooltip(
+                          message: 'Open profile detail',
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Icon(
+                              Icons.open_in_full_rounded,
+                              size: 14,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -412,7 +443,7 @@ class _TrackPointsList extends StatelessWidget {
         }
 
         return ReorderableListView.builder(
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.fromLTRB(0, 4, 0, 64),
           itemCount: points.length,
           onReorder: provider.reorderTrackPoints,
           proxyDecorator: (child, index, animation) {
@@ -562,8 +593,8 @@ class _TrackPointTile extends StatelessWidget {
   }
 }
 
-class _WaypointsList extends StatelessWidget {
-  const _WaypointsList();
+class WaypointsList extends StatelessWidget {
+  const WaypointsList({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -614,7 +645,7 @@ class _WaypointsList extends StatelessWidget {
 
         final profile = provider.elevationProfile();
         return ReorderableListView.builder(
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.fromLTRB(0, 4, 0, 64),
           itemCount: waypoints.length,
           onReorder: provider.reorderWaypoints,
           proxyDecorator: (child, index, animation) {
@@ -919,8 +950,8 @@ class _WaypointTile extends StatelessWidget {
   }
 }
 
-class _ClimbsList extends StatelessWidget {
-  const _ClimbsList();
+class ClimbsList extends StatelessWidget {
+  const ClimbsList({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -944,7 +975,7 @@ class _ClimbsList extends StatelessWidget {
           );
         }
         return ListView.separated(
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.fromLTRB(0, 4, 0, 64),
           itemCount: climbs.length,
           separatorBuilder: (_, _) => const SizedBox(height: 2),
           itemBuilder: (context, index) {
@@ -1256,8 +1287,8 @@ class _ClimbStat extends StatelessWidget {
 /// with cumulative distance from start and "to next" leg distance — the
 /// classic race-brief "aid-station table" most trail runners check before
 /// a race.
-class _SplitsList extends StatelessWidget {
-  const _SplitsList();
+class SplitsList extends StatelessWidget {
+  const SplitsList({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -1363,7 +1394,7 @@ class _SplitsList extends StatelessWidget {
             ),
             Expanded(
               child: ListView.separated(
-                padding: const EdgeInsets.symmetric(vertical: 2),
+                padding: const EdgeInsets.fromLTRB(0, 2, 0, 64),
                 itemCount: rows.length,
                 separatorBuilder: (_, _) => Divider(
                   height: 1,

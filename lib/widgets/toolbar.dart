@@ -246,86 +246,103 @@ class GpxDrawer extends StatelessWidget {
                 ),
                 const Divider(height: 1),
                 Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    children: [
-                      _DrawerSection(label: 'File'),
-                      _DrawerItem(
-                        icon: Icons.add_rounded,
-                        label: 'New route',
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          _confirmNew(context, provider);
-                        },
-                      ),
-                      _DrawerItem(
-                        icon: Icons.file_open_rounded,
-                        label: 'Import GPX…',
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          _importFile(context, provider);
-                        },
-                      ),
-                      _DrawerItem(
-                        icon: Icons.download_rounded,
-                        label: 'Export GPX',
-                        enabled: hasData,
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          _exportFile(context, provider);
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      _DrawerSection(label: 'Waypoints'),
-                      _DrawerItem(
-                        icon: Icons.straighten_rounded,
-                        label: 'Add by km…',
-                        enabled: hasData,
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          showAddWaypointByDistanceDialog(context, provider);
-                        },
-                      ),
-                      _DrawerItem(
-                        icon: Icons.landscape_rounded,
-                        label: 'Auto-create from climbs',
-                        enabled: hasData,
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          _autoWaypointsFromClimbs(context, provider);
-                        },
-                      ),
-                      _DrawerItem(
-                        icon: Icons.public_rounded,
-                        label: 'Import from Trace de Trail…',
-                        enabled: hasData,
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          _importTraceDeTrailWaypoints(context, provider);
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      _DrawerSection(label: 'Route'),
-                      _DrawerItem(
-                        icon: Icons.swap_horiz_rounded,
-                        label: 'Reverse direction',
-                        enabled: hasData,
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          provider.reverseRoute();
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      const Divider(height: 1),
-                      _DrawerItem(
-                        icon: Icons.lightbulb_outline_rounded,
-                        label: 'Request a feature',
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          _openFeatureRequest();
-                        },
-                      ),
-                    ],
+                  child: Builder(
+                    builder: (drawerContext) {
+                      // Pop the drawer first, then run the action on the
+                      // ROOT navigator's context. The drawer's own
+                      // BuildContext is unmounted as soon as we pop, so
+                      // any async work that checks `context.mounted`
+                      // (file picker, snackbar, showDialog) silently
+                      // bailed out — that's why "Import GPX" did
+                      // nothing after the file picker closed.
+                      void run(void Function(BuildContext rootCtx) action) {
+                        final rootCtx = Navigator.of(
+                          drawerContext,
+                          rootNavigator: true,
+                        ).context;
+                        Navigator.of(drawerContext).pop();
+                        action(rootCtx);
+                      }
+
+                      return ListView(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        children: [
+                          _DrawerSection(label: 'File'),
+                          _DrawerItem(
+                            icon: Icons.add_rounded,
+                            label: 'New route',
+                            onTap: () => run(
+                              (ctx) => _confirmNew(ctx, provider),
+                            ),
+                          ),
+                          _DrawerItem(
+                            icon: Icons.file_open_rounded,
+                            label: 'Import GPX…',
+                            onTap: () => run(
+                              (ctx) => _importFile(ctx, provider),
+                            ),
+                          ),
+                          _DrawerItem(
+                            icon: Icons.download_rounded,
+                            label: 'Export GPX',
+                            enabled: hasData,
+                            onTap: () => run(
+                              (ctx) => _exportFile(ctx, provider),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          _DrawerSection(label: 'Waypoints'),
+                          _DrawerItem(
+                            icon: Icons.straighten_rounded,
+                            label: 'Add by km…',
+                            enabled: hasData,
+                            onTap: () => run(
+                              (ctx) => showAddWaypointByDistanceDialog(
+                                ctx,
+                                provider,
+                              ),
+                            ),
+                          ),
+                          _DrawerItem(
+                            icon: Icons.landscape_rounded,
+                            label: 'Auto-create from climbs',
+                            enabled: hasData,
+                            onTap: () => run(
+                              (ctx) => _autoWaypointsFromClimbs(
+                                ctx,
+                                provider,
+                              ),
+                            ),
+                          ),
+                          _DrawerItem(
+                            icon: Icons.public_rounded,
+                            label: 'Import from Trace de Trail…',
+                            enabled: hasData,
+                            onTap: () => run(
+                              (ctx) => _importTraceDeTrailWaypoints(
+                                ctx,
+                                provider,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          _DrawerSection(label: 'Route'),
+                          _DrawerItem(
+                            icon: Icons.swap_horiz_rounded,
+                            label: 'Reverse direction',
+                            enabled: hasData,
+                            onTap: () => run((_) => provider.reverseRoute()),
+                          ),
+                          const SizedBox(height: 8),
+                          const Divider(height: 1),
+                          _DrawerItem(
+                            icon: Icons.lightbulb_outline_rounded,
+                            label: 'Request a feature',
+                            onTap: () => run((_) => _openFeatureRequest()),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ],

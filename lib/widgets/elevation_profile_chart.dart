@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../utils/elevation_profile.dart';
 import '../utils/geo_utils.dart';
@@ -30,6 +31,7 @@ class ElevationProfileChart extends StatelessWidget {
     required this.hoverDistance,
     this.waypointTicks = const [],
     this.height = 96,
+    this.highlightRange,
   });
 
   final ElevationProfile profile;
@@ -39,6 +41,11 @@ class ElevationProfileChart extends StatelessWidget {
   /// along the elevation profile.
   final List<WaypointTick> waypointTicks;
   final double height;
+
+  /// Optional (startMeters, endMeters) range to shade as a colored band
+  /// behind the curve. Used by the profile detail dialog to show the
+  /// active hovered climb without lighting up the map.
+  final ValueListenable<(double, double)?>? highlightRange;
 
   static const double _padH = 8;
   static const double _padTop = 26;
@@ -88,16 +95,23 @@ class ElevationProfileChart extends StatelessWidget {
               child: ValueListenableBuilder<double?>(
                 valueListenable: hoverDistance,
                 builder: (context, hoverD, _) {
-                  return CustomPaint(
-                    painter: _ElevationPainter(
-                      profile: profile,
-                      hoverDistance: hoverD,
-                      waypointTicks: waypointTicks,
-                      padH: _padH,
-                      padTop: _padTop,
-                      padBottom: _padBottom,
-                    ),
-                    size: Size.infinite,
+                  return ValueListenableBuilder<(double, double)?>(
+                    valueListenable: highlightRange ??
+                        ValueNotifier<(double, double)?>(null),
+                    builder: (context, range, _) {
+                      return CustomPaint(
+                        painter: _ElevationPainter(
+                          profile: profile,
+                          hoverDistance: hoverD,
+                          waypointTicks: waypointTicks,
+                          highlightRange: range,
+                          padH: _padH,
+                          padTop: _padTop,
+                          padBottom: _padBottom,
+                        ),
+                        size: Size.infinite,
+                      );
+                    },
                   );
                 },
               ),
@@ -117,11 +131,13 @@ class _ElevationPainter extends CustomPainter {
     required this.padH,
     required this.padTop,
     required this.padBottom,
+    this.highlightRange,
   });
 
   final ElevationProfile profile;
   final double? hoverDistance;
   final List<WaypointTick> waypointTicks;
+  final (double, double)? highlightRange;
   final double padH;
   final double padTop;
   final double padBottom;
@@ -184,6 +200,24 @@ class _ElevationPainter extends CustomPainter {
         ],
       ).createShader(Rect.fromLTWH(0, padTop, size.width, innerH));
     canvas.drawPath(areaPath, areaPaint);
+
+    // Highlight band (e.g. hovered climb extent). Drawn under the curve
+    // and over the gradient so the band reads as a colored "spotlight"
+    // on the relevant section without obscuring the line.
+    if (highlightRange != null) {
+      final (hStart, hEnd) = highlightRange!;
+      final clampedStart = hStart.clamp(0, totalD).toDouble();
+      final clampedEnd = hEnd.clamp(0, totalD).toDouble();
+      if (clampedEnd > clampedStart) {
+        final left = xFor(clampedStart);
+        final right = xFor(clampedEnd);
+        final rect = Rect.fromLTRB(left, padTop, right, baselineY);
+        canvas.drawRect(
+          rect,
+          Paint()..color = const Color(0xFFEF4444).withValues(alpha: 0.15),
+        );
+      }
+    }
 
     // Curve.
     final linePaint = Paint()
@@ -380,6 +414,7 @@ class _ElevationPainter extends CustomPainter {
   bool shouldRepaint(covariant _ElevationPainter oldDelegate) {
     return oldDelegate.profile != profile ||
         oldDelegate.hoverDistance != hoverDistance ||
+        oldDelegate.highlightRange != highlightRange ||
         !_ticksEqual(oldDelegate.waypointTicks, waypointTicks);
   }
 
