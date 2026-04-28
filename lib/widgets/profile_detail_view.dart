@@ -46,6 +46,7 @@ class _ProfileDetailViewState extends State<ProfileDetailView>
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Consumer<GpxProvider>(
       builder: (context, provider, _) {
         final data = provider.data;
@@ -59,9 +60,7 @@ class _ProfileDetailViewState extends State<ProfileDetailView>
           );
         }
 
-        final trackPoints =
-            data.tracks.expand((t) => t.allPoints).toList(growable: false);
-        final profile = ElevationProfile.fromPoints(trackPoints);
+        final profile = provider.elevationProfile();
 
         final ticks = <WaypointTick>[];
         if (!profile.isEmpty) {
@@ -171,6 +170,7 @@ class _HoverReadout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return ValueListenableBuilder<double?>(
       valueListenable: provider.hoverDistance,
       builder: (context, d, _) {

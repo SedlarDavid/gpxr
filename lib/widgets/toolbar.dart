@@ -21,6 +21,7 @@ class Toolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Consumer<GpxProvider>(
       builder: (context, provider, _) {
         return LayoutBuilder(
@@ -29,7 +30,7 @@ class Toolbar extends StatelessWidget {
             return Container(
               height: 56,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppTheme.cardColor,
                 border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -184,7 +185,35 @@ class Toolbar extends StatelessWidget {
         logo,
         const SizedBox(width: 12),
         scrollableMiddle,
+        const _ThemeToggleButton(),
       ],
+    );
+  }
+}
+
+/// Sun/moon brightness toggle pinned to the right edge of the toolbar.
+/// Listens to [AppTheme.themeMode] so the icon flips immediately when
+/// the mode changes (and stays in sync if it's ever flipped from
+/// elsewhere). Persists to localStorage via [AppTheme.toggleMode].
+class _ThemeToggleButton extends StatelessWidget {
+  const _ThemeToggleButton();
+
+  @override
+  Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: AppTheme.themeMode,
+      builder: (_, mode, _) {
+        final dark = mode == ThemeMode.dark;
+        return IconButton(
+          icon: Icon(
+            dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+          ),
+          tooltip: dark ? 'Switch to light mode' : 'Switch to dark mode',
+          visualDensity: VisualDensity.compact,
+          onPressed: AppTheme.toggleMode,
+        );
+      },
     );
   }
 }
@@ -199,6 +228,7 @@ class GpxDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Consumer<GpxProvider>(
       builder: (context, provider, _) {
         final hasData = provider.hasData;
@@ -283,6 +313,14 @@ class GpxDrawer extends StatelessWidget {
                             ),
                           ),
                           _DrawerItem(
+                            icon: Icons.library_add_rounded,
+                            label: 'Merge GPX…',
+                            enabled: hasData,
+                            onTap: () => run(
+                              (ctx) => _appendFiles(ctx, provider),
+                            ),
+                          ),
+                          _DrawerItem(
                             icon: Icons.download_rounded,
                             label: 'Export GPX',
                             enabled: hasData,
@@ -360,6 +398,7 @@ class _DrawerSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Text(
@@ -390,6 +429,7 @@ class _DrawerItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     final fg = enabled
         ? AppTheme.textPrimary
         : AppTheme.textSecondary.withValues(alpha: 0.4);
@@ -471,41 +511,71 @@ Future<void> _autoWaypointsFromClimbs(
   }
 
   Future<void> _importFile(BuildContext context, GpxProvider provider) async {
+    final controller = _LoadingController(context);
     try {
+      // Show the dialog BEFORE opening the picker. The OS picker will
+      // sit on top of it while it's open, but the moment the user
+      // confirms (or cancels) and the picker dismisses, our dialog is
+      // already mounted and visible — covering the silent file_picker
+      // bytes-read phase that previously showed no feedback at all.
+      // We await an actual frame so the dialog is painted before the
+      // synchronous picker call yields control.
+      controller.show('Opening file…');
+      await WidgetsBinding.instance.endOfFrame;
+
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['gpx', 'xml'],
         withData: true,
+        // Multi-pick lets the user load a multi-day trip in one go: the
+        // first file replaces whatever's loaded, and the rest get
+        // merged in as additional tracks with their own colors.
+        allowMultiple: true,
+        onFileLoading: (status) {
+          if (status == FilePickerStatus.picking) {
+            controller.update('Reading file…');
+          }
+        },
       );
 
       if (result == null || result.files.isEmpty) return;
-      final file = result.files.first;
-      final bytes = file.bytes;
-      if (bytes == null) return;
+      final files = result.files.where((f) => f.bytes != null).toList();
+      if (files.isEmpty) return;
       if (!context.mounted) return;
 
-      // Parsing a 50 km+ GPX takes long enough on the web to feel frozen,
-      // so show a blocking loading dialog while we decode + parse. The
-      // Future.delayed yields one frame so the dialog actually paints
-      // before the synchronous parse starts.
-      await _runWithLoading(
-        context,
-        message: 'Parsing ${file.name}…',
+      final firstFile = files.first;
+      await controller.runTask(
+        message: files.length == 1
+            ? 'Parsing ${firstFile.name}…'
+            : 'Parsing 1 of ${files.length}: ${firstFile.name}…',
         task: () async {
-          await Future<void>.delayed(Duration.zero);
-          final content = utf8.decode(bytes);
-          provider.loadFromString(content, file.name);
+          final content = utf8.decode(firstFile.bytes!);
+          provider.loadFromString(content, firstFile.name);
+          for (int i = 1; i < files.length; i++) {
+            final f = files[i];
+            controller.update('Parsing ${i + 1} of ${files.length}: ${f.name}…');
+            // Yield a frame between files so the message visibly
+            // updates instead of jumping from "1 of 4" straight to
+            // dismissed when the loop finishes.
+            await WidgetsBinding.instance.endOfFrame;
+            final c = utf8.decode(f.bytes!);
+            provider.appendFromString(c, f.name);
+          }
         },
       );
 
       // Detect sources we know how to enrich and offer an auto-import.
+      // Skip when we merged multiple files — the prompt assumes one
+      // primary source URL and the user is in bulk-load mode anyway.
       if (!context.mounted) return;
-      final sourceUrl = provider.data?.sourceUrl;
-      if (sourceUrl != null &&
-          TraceDeTrailImporter.extractTraceId(sourceUrl) != null) {
-        final accepted = await _askEnrichFromTraceDeTrail(context, sourceUrl);
-        if (accepted == true && context.mounted) {
-          await _fetchAndImportWaypoints(context, provider, sourceUrl);
+      if (files.length == 1) {
+        final sourceUrl = provider.data?.sourceUrl;
+        if (sourceUrl != null &&
+            TraceDeTrailImporter.extractTraceId(sourceUrl) != null) {
+          final accepted = await _askEnrichFromTraceDeTrail(context, sourceUrl);
+          if (accepted == true && context.mounted) {
+            await _fetchAndImportWaypoints(context, provider, sourceUrl);
+          }
         }
       }
     } catch (e) {
@@ -513,6 +583,79 @@ Future<void> _autoWaypointsFromClimbs(
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to import file: $e'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+    } finally {
+      controller.dismiss();
+      controller.dispose();
+    }
+  }
+
+  /// Picks one or more GPX files and merges every track into the
+  /// currently loaded data without replacing it. Falls back to a
+  /// regular import when nothing is loaded yet.
+  Future<void> _appendFiles(BuildContext context, GpxProvider provider) async {
+    if (!provider.hasData) {
+      await _importFile(context, provider);
+      return;
+    }
+    final controller = _LoadingController(context);
+    try {
+      controller.show('Opening file…');
+      await WidgetsBinding.instance.endOfFrame;
+
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['gpx', 'xml'],
+        withData: true,
+        allowMultiple: true,
+        onFileLoading: (status) {
+          if (status == FilePickerStatus.picking) {
+            controller.update('Reading file…');
+          }
+        },
+      );
+      if (result == null || result.files.isEmpty) return;
+      final files = result.files.where((f) => f.bytes != null).toList();
+      if (files.isEmpty) return;
+      if (!context.mounted) return;
+      int added = 0;
+      await controller.runTask(
+        message: files.length == 1
+            ? 'Merging ${files.first.name}…'
+            : 'Merging 1 of ${files.length}: ${files.first.name}…',
+        task: () async {
+          for (int i = 0; i < files.length; i++) {
+            final f = files[i];
+            if (i > 0) {
+              controller.update(
+                'Merging ${i + 1} of ${files.length}: ${f.name}…',
+              );
+              await WidgetsBinding.instance.endOfFrame;
+            }
+            final c = utf8.decode(f.bytes!);
+            added += provider.appendFromString(c, f.name);
+          }
+        },
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Merged $added track${added == 1 ? '' : 's'} '
+            'from ${files.length} file${files.length == 1 ? '' : 's'}',
+          ),
+          backgroundColor: const Color(0xFF22C55E),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to merge file: $e'),
             backgroundColor: const Color(0xFFEF4444),
           ),
         );
@@ -644,19 +787,24 @@ Future<void> _autoWaypointsFromClimbs(
     final messenger = ScaffoldMessenger.of(context);
     int? added;
     Object? error;
-    await _runWithLoading(
-      context,
-      message: 'Fetching waypoints from Trace de Trail…',
-      task: () async {
-        try {
-          final importer = TraceDeTrailImporter();
-          final waypoints = await importer.fetchWaypoints(urlOrId);
-          added = provider.importWaypoints(waypoints);
-        } catch (e) {
-          error = e;
-        }
-      },
-    );
+    final controller = _LoadingController(context);
+    try {
+      await controller.runTask(
+        message: 'Fetching waypoints from Trace de Trail…',
+        task: () async {
+          try {
+            final importer = TraceDeTrailImporter();
+            final waypoints = await importer.fetchWaypoints(urlOrId);
+            added = provider.importWaypoints(waypoints);
+          } catch (e) {
+            error = e;
+          }
+        },
+      );
+    } finally {
+      controller.dismiss();
+      controller.dispose();
+    }
 
     if (error != null) {
       final msg = error is TraceDeTrailImportException
@@ -688,25 +836,6 @@ Future<void> _autoWaypointsFromClimbs(
     );
   }
 
-  /// Shows a modal spinner while [task] runs and guarantees the dialog
-  /// is dismissed even if the task throws. The dialog is barrier-
-  /// dismissible-false so the user can't accidentally cancel mid-parse.
-  Future<void> _runWithLoading(
-    BuildContext context, {
-    required String message,
-    required Future<void> Function() task,
-  }) async {
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _LoadingDialog(message: message),
-    );
-    try {
-      await task();
-    } finally {
-      if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
-    }
-  }
 
   void _openFeatureRequest() {
     web.window.open(
@@ -765,6 +894,7 @@ class _ActivityToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Tooltip(
       message:
           'Activity type — drives climb grading and grade colors. '
@@ -857,6 +987,7 @@ class _ToolbarToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     final enabled = onTap != null;
     final color = activeColor ?? AppTheme.primaryColor;
 
@@ -908,6 +1039,76 @@ class _ToolbarToggle extends StatelessWidget {
   }
 }
 
+/// Controls a single modal loading dialog whose message can be updated
+/// while the dialog is on screen. Used by the import flows so the user
+/// gets continuous feedback through the three phases that can each
+/// take seconds (file read, parse, optional remote enrichment) without
+/// the dialog flashing in and out between them.
+class _LoadingController {
+  _LoadingController(this._context);
+
+  final BuildContext _context;
+  final ValueNotifier<String> _message = ValueNotifier<String>('Loading…');
+  bool _shown = false;
+  bool _disposed = false;
+
+  /// Shows the dialog with [message] if it isn't on screen yet, or
+  /// just updates the message when it already is. Safe to call
+  /// repeatedly; the dialog only mounts once per controller.
+  void show(String message) {
+    _message.value = message;
+    if (_shown || _disposed || !_context.mounted) return;
+    _shown = true;
+    showDialog<void>(
+      context: _context,
+      barrierDismissible: false,
+      builder: (_) => ValueListenableBuilder<String>(
+        valueListenable: _message,
+        builder: (_, m, _) => _LoadingDialog(message: m),
+      ),
+    );
+  }
+
+  /// Updates the visible message. No-op if the dialog hasn't been
+  /// shown yet (call [show] first).
+  void update(String message) {
+    _message.value = message;
+  }
+
+  /// Shows the dialog (if not already), waits for the engine to
+  /// actually paint a frame so the spinner appears before [task]
+  /// starts, then runs [task]. The wait matters: a synchronous XML
+  /// parse on the main thread will otherwise start before the dialog
+  /// renders, leaving the user staring at a frozen UI for seconds.
+  Future<void> runTask({
+    required String message,
+    required Future<void> Function() task,
+  }) async {
+    show(message);
+    // First endOfFrame: the dialog widget tree is built and laid out.
+    // Second endOfFrame: pixels are actually presented to the canvas.
+    // The microtask yield in between handles the case where the
+    // engine was mid-frame when showDialog requested a build.
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(Duration.zero);
+    await WidgetsBinding.instance.endOfFrame;
+    await task();
+  }
+
+  void dismiss() {
+    if (!_shown || _disposed) return;
+    _shown = false;
+    if (_context.mounted) {
+      Navigator.of(_context, rootNavigator: true).pop();
+    }
+  }
+
+  void dispose() {
+    _disposed = true;
+    _message.dispose();
+  }
+}
+
 class _LoadingDialog extends StatelessWidget {
   const _LoadingDialog({required this.message});
 
@@ -915,6 +1116,7 @@ class _LoadingDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       content: SizedBox(
@@ -959,6 +1161,7 @@ class _ToolbarCheck extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Tooltip(
       message: '${isChecked ? "Hide" : "Show"} $label',
       child: Material(

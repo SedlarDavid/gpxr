@@ -48,6 +48,7 @@ class _WelcomeDialogState extends State<_WelcomeDialog> {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     final screenWidth = MediaQuery.of(context).size.width;
     final dialogWidth = screenWidth < 520 ? screenWidth - 48 : 460.0;
     return AlertDialog(
@@ -195,6 +196,7 @@ class _FeatureBullet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(

@@ -156,7 +156,12 @@ class _MapViewState extends State<MapView> {
     int bestSeg = 0;
     double bestT = 0;
     final last = xs.length - 1;
+    final boundary = profile.segmentStarts.toSet();
     for (int i = 0; i < last; i++) {
+      // The pair (i, i+1) crosses a track boundary — there is no real
+      // polyline between the end of one track and the start of the
+      // next, so skip the phantom segment.
+      if (boundary.contains(i + 1)) continue;
       final ax = xs[i];
       final ay = ys[i];
       final bx = xs[i + 1];
@@ -370,6 +375,7 @@ class _MapViewState extends State<MapView> {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Consumer<GpxProvider>(
       builder: (context, provider, _) {
         final data = provider.data;
@@ -377,10 +383,7 @@ class _MapViewState extends State<MapView> {
         final cursorStyle = _cursorForMode(provider.editMode);
         _maybeAutoFit(data, provider.fileName);
 
-        final trackPoints = data == null
-            ? const <GpxTrackPoint>[]
-            : data.tracks.expand((t) => t.allPoints).toList();
-        final profile = ElevationProfile.fromPoints(trackPoints);
+        final profile = provider.elevationProfile();
         final hoverEnabled = provider.editMode == EditMode.view &&
             profile.length >= 2;
 
@@ -426,7 +429,7 @@ class _MapViewState extends State<MapView> {
                   ),
                   if (data != null) ..._buildTrackLayers(data, provider),
                   if (data != null && profile.length >= 2)
-                    _buildDirectionMarkers(profile, provider.routeColor),
+                    _buildDirectionMarkers(profile, provider),
                   if (data != null && profile.length >= 1)
                     _buildStartFinishMarkers(profile),
                   if (data != null && provider.showWaypoints)
@@ -666,12 +669,52 @@ class _MapViewState extends State<MapView> {
 
   Widget _buildDirectionMarkers(
     ElevationProfile profile,
-    Color routeColor,
+    GpxProvider provider,
   ) {
     const maxArrows = 14;
     const minSpacingMeters = 250.0;
     final total = profile.totalDistance;
     if (total < 150) return const MarkerLayer(markers: []);
+
+    // Map each profile sub-segment back to the GpxTrack it came from so
+    // each arrow inherits the same per-track color as the polyline it
+    // sits on. Otherwise multi-track maps end up with arrows in the
+    // global picker color drawn over polylines in different colors.
+    final visibleTracks = provider.visibleTracks;
+    final starts = profile.segmentStarts;
+
+    int segmentIndexForPointIndex(int idx) {
+      // Linear scan — segmentStarts is short (one entry per track).
+      int seg = 0;
+      for (int s = 0; s < starts.length; s++) {
+        if (starts[s] <= idx) seg = s;
+      }
+      return seg;
+    }
+
+    int findPointIndexForDistance(double d) {
+      final dists = profile.distances;
+      if (dists.isEmpty) return 0;
+      int lo = 0, hi = dists.length - 1;
+      while (lo < hi) {
+        final mid = (lo + hi) >> 1;
+        if (dists[mid] < d) {
+          lo = mid + 1;
+        } else {
+          hi = mid;
+        }
+      }
+      return lo;
+    }
+
+    Color colorAtDistance(double d) {
+      final idx = findPointIndexForDistance(d);
+      final seg = segmentIndexForPointIndex(idx);
+      if (seg < visibleTracks.length) {
+        return provider.colorForTrack(visibleTracks[seg].id);
+      }
+      return provider.routeColor;
+    }
 
     final spacing = math.max(total / (maxArrows + 1), minSpacingMeters);
     final markers = <Marker>[];
@@ -682,6 +725,7 @@ class _MapViewState extends State<MapView> {
       final after = profile.sampleAtDistance(math.min(total, d + delta));
       final angle = GeoUtils.mercatorBearing(before.latLng, after.latLng);
       final pos = profile.sampleAtDistance(d);
+      final color = colorAtDistance(d);
       markers.add(
         Marker(
           point: pos.latLng,
@@ -694,7 +738,7 @@ class _MapViewState extends State<MapView> {
               child: Icon(
                 Icons.navigation_rounded,
                 size: 16,
-                color: routeColor.withValues(alpha: 0.9),
+                color: color.withValues(alpha: 0.9),
                 shadows: const [
                   Shadow(color: Colors.white, blurRadius: 2),
                 ],
@@ -756,8 +800,12 @@ class _MapViewState extends State<MapView> {
     // without forcing the user to think about two separate colors.
     final routeAltColor = routeColor.withValues(alpha: 0.75);
 
-    // Track polylines
+    // Track polylines — per-track color (respects merged-track overrides)
+    // and skipped entirely when the user has hidden that track in the
+    // Tracks tab.
     for (final track in data.tracks) {
+      if (!provider.isTrackVisible(track.id)) continue;
+      final color = provider.colorForTrack(track.id);
       for (final seg in track.segments) {
         if (seg.points.length >= 2) {
           layers.add(
@@ -765,7 +813,7 @@ class _MapViewState extends State<MapView> {
               polylines: [
                 Polyline(
                   points: seg.points.map((p) => p.latLng).toList(),
-                  color: routeColor,
+                  color: color,
                   strokeWidth: 4,
                 ),
               ],
@@ -796,6 +844,7 @@ class _MapViewState extends State<MapView> {
     if (provider.showTrackPoints || provider.editMode != EditMode.view) {
       final markers = <Marker>[];
       for (final track in data.tracks) {
+        if (!provider.isTrackVisible(track.id)) continue;
         for (final seg in track.segments) {
           for (final pt in seg.points) {
             final isSelected = pt.id == provider.selectedPointId;
@@ -1049,8 +1098,9 @@ class _RouteColorButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Material(
-      color: Colors.white,
+      color: AppTheme.cardColor,
       borderRadius: BorderRadius.circular(8),
       elevation: 2,
       child: SizedBox(
@@ -1159,8 +1209,9 @@ class _LayerMenuButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Material(
-      color: Colors.white,
+      color: AppTheme.cardColor,
       borderRadius: BorderRadius.circular(8),
       elevation: 2,
       child: SizedBox(
@@ -1213,6 +1264,7 @@ class _EndpointBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Tooltip(
       message: tooltip,
       child: Container(
@@ -1248,6 +1300,7 @@ class _HoverTooltip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Positioned.fill(
       child: IgnorePointer(
         child: LayoutBuilder(
@@ -1352,10 +1405,11 @@ class _MapButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: Colors.white,
+        color: AppTheme.cardColor,
         borderRadius: BorderRadius.circular(8),
         elevation: 2,
         child: InkWell(

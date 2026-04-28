@@ -66,6 +66,7 @@ class ElevationProfileChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     if (profile.isEmpty || !profile.hasElevation) {
       return Container(
         height: height,
@@ -91,42 +92,52 @@ class ElevationProfileChart extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           return MouseRegion(
-            onHover: (e) => _updateHover(e.localPosition.dx, constraints.maxWidth),
+            onHover: (e) =>
+                _updateHover(e.localPosition.dx, constraints.maxWidth),
             onExit: (_) => hoverDistance.value = null,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onPanStart: (d) => _updateHover(d.localPosition.dx, constraints.maxWidth),
-              onPanUpdate: (d) => _updateHover(d.localPosition.dx, constraints.maxWidth),
+              onPanStart: (d) =>
+                  _updateHover(d.localPosition.dx, constraints.maxWidth),
+              onPanUpdate: (d) =>
+                  _updateHover(d.localPosition.dx, constraints.maxWidth),
               onPanEnd: (_) => hoverDistance.value = null,
-              child: ValueListenableBuilder<double?>(
-                valueListenable: hoverDistance,
-                builder: (context, hoverD, _) {
-                  return ValueListenableBuilder<(double, double)?>(
-                    valueListenable: highlightRange ??
-                        ValueNotifier<(double, double)?>(null),
-                    builder: (context, climbRange, _) {
-                      return ValueListenableBuilder<(double, double)?>(
-                        valueListenable: descentHighlightRange ??
-                            ValueNotifier<(double, double)?>(null),
-                        builder: (context, descentRange, _) {
-                          return CustomPaint(
-                            painter: _ElevationPainter(
-                              profile: profile,
-                              hoverDistance: hoverD,
-                              waypointTicks: waypointTicks,
-                              highlightRange: climbRange,
-                              descentHighlightRange: descentRange,
-                              padH: _padH,
-                              padTop: _padTop,
-                              padBottom: _padBottom,
-                            ),
-                            size: Size.infinite,
-                          );
-                        },
-                      );
-                    },
-                  );
-                },
+              // Two-layer painter: the curve / bands / waypoint ticks
+              // sit in a RepaintBoundary so they're rasterized once and
+              // reused, then the hover overlay paints on top. Before
+              // this split, every mouse-move repainted the entire 45k-
+              // point curve at 60 fps because the painter took
+              // hoverDistance as input.
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  RepaintBoundary(
+                    child: _CurveLayer(
+                      profile: profile,
+                      waypointTicks: waypointTicks,
+                      highlightRange: highlightRange,
+                      descentHighlightRange: descentHighlightRange,
+                      padH: _padH,
+                      padTop: _padTop,
+                      padBottom: _padBottom,
+                    ),
+                  ),
+                  RepaintBoundary(
+                    child: ValueListenableBuilder<double?>(
+                      valueListenable: hoverDistance,
+                      builder: (context, hoverD, _) => CustomPaint(
+                        painter: _HoverPainter(
+                          profile: profile,
+                          hoverDistance: hoverD,
+                          padH: _padH,
+                          padTop: _padTop,
+                          padBottom: _padBottom,
+                        ),
+                        size: Size.infinite,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           );
@@ -136,10 +147,69 @@ class ElevationProfileChart extends StatelessWidget {
   }
 }
 
-class _ElevationPainter extends CustomPainter {
-  _ElevationPainter({
+/// Module-level fallback listenable so charts without a highlight
+/// range don't allocate a fresh `ValueNotifier(null)` on every build —
+/// each fresh allocation also stranded the previous frame's listener
+/// attachments, which compounded the cost.
+final ValueListenable<(double, double)?> _kNullRange =
+    ValueNotifier<(double, double)?>(null);
+
+/// Curve + waypoint ticks + climb/descent highlight bands. Subscribes
+/// only to the highlight ranges (which change a few times per second
+/// on hover, not 60 times like cursor position), so its CustomPaint
+/// can sit in a RepaintBoundary that the engine effectively caches
+/// between hover frames.
+class _CurveLayer extends StatelessWidget {
+  const _CurveLayer({
     required this.profile,
-    required this.hoverDistance,
+    required this.waypointTicks,
+    required this.highlightRange,
+    required this.descentHighlightRange,
+    required this.padH,
+    required this.padTop,
+    required this.padBottom,
+  });
+
+  final ElevationProfile profile;
+  final List<WaypointTick> waypointTicks;
+  final ValueListenable<(double, double)?>? highlightRange;
+  final ValueListenable<(double, double)?>? descentHighlightRange;
+  final double padH;
+  final double padTop;
+  final double padBottom;
+
+  @override
+  Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
+    return ValueListenableBuilder<(double, double)?>(
+      valueListenable: highlightRange ?? _kNullRange,
+      builder: (_, climb, _) => ValueListenableBuilder<(double, double)?>(
+        valueListenable: descentHighlightRange ?? _kNullRange,
+        builder: (_, descent, _) => CustomPaint(
+          painter: _CurvePainter(
+            profile: profile,
+            waypointTicks: waypointTicks,
+            highlightRange: climb,
+            descentHighlightRange: descent,
+            padH: padH,
+            padTop: padTop,
+            padBottom: padBottom,
+          ),
+          size: Size.infinite,
+        ),
+      ),
+    );
+  }
+}
+
+/// Static layer of the elevation chart: curve, gradient fill, climb /
+/// descent highlight bands, axis labels, waypoint ticks. Repaints only
+/// when the profile, ticks, or highlight ranges change — *not* on
+/// hover. Wrapped in a RepaintBoundary by the caller so its raster is
+/// reused across hover frames.
+class _CurvePainter extends CustomPainter {
+  _CurvePainter({
+    required this.profile,
     required this.waypointTicks,
     required this.padH,
     required this.padTop,
@@ -149,7 +219,6 @@ class _ElevationPainter extends CustomPainter {
   });
 
   final ElevationProfile profile;
-  final double? hoverDistance;
   final List<WaypointTick> waypointTicks;
   final (double, double)? highlightRange;
   final (double, double)? descentHighlightRange;
@@ -176,33 +245,47 @@ class _ElevationPainter extends CustomPainter {
     // Baseline at the bottom of the inner area.
     final baselineY = padTop + innerH;
 
-    // Build the path along the profile.
+    // Build the path along the profile. Start a fresh sub-path at each
+    // track boundary so a multi-track profile renders as separate
+    // polylines instead of one ugly vertical line connecting the end
+    // of one track to the start of the next.
     final linePath = Path();
     final areaPath = Path();
-    bool started = false;
-    double? firstX;
-    double? lastX;
+    final boundarySet = profile.segmentStarts.toSet();
+    bool subStarted = false;
+    double? subFirstX;
+    double? subLastX;
+
+    void closeSubArea() {
+      if (subStarted && subLastX != null && subFirstX != null) {
+        areaPath.lineTo(subLastX!, baselineY);
+        areaPath.close();
+      }
+      subStarted = false;
+      subFirstX = null;
+      subLastX = null;
+    }
+
     for (int i = 0; i < profile.length; i++) {
       final e = profile.elevations[i];
       if (e == null) continue;
       final x = xFor(profile.distances[i]);
       final y = yFor(e);
-      if (!started) {
+      final isBoundary = i > 0 && boundarySet.contains(i);
+      if (!subStarted || isBoundary) {
+        if (isBoundary) closeSubArea();
         linePath.moveTo(x, y);
         areaPath.moveTo(x, baselineY);
         areaPath.lineTo(x, y);
-        firstX = x;
-        started = true;
+        subFirstX = x;
+        subStarted = true;
       } else {
         linePath.lineTo(x, y);
         areaPath.lineTo(x, y);
       }
-      lastX = x;
+      subLastX = x;
     }
-    if (started && lastX != null && firstX != null) {
-      areaPath.lineTo(lastX, baselineY);
-      areaPath.close();
-    }
+    closeSubArea();
 
     // Fill gradient under the curve.
     final areaPaint = Paint()
@@ -251,6 +334,24 @@ class _ElevationPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round
       ..strokeCap = StrokeCap.round;
     canvas.drawPath(linePath, linePaint);
+
+    // Faint vertical divider at each track boundary so the user can see
+    // where one merged track ends and the next begins. Skipped for the
+    // first segment (its boundary is the chart's left edge).
+    if (profile.segmentStarts.length > 1) {
+      final dividerPaint = Paint()
+        ..color = AppTheme.textSecondary.withValues(alpha: 0.35)
+        ..strokeWidth = 1;
+      for (int s = 1; s < profile.segmentStarts.length; s++) {
+        final idx = profile.segmentStarts[s];
+        final dx = xFor(profile.distances[idx]);
+        canvas.drawLine(
+          Offset(dx, padTop),
+          Offset(dx, baselineY),
+          dividerPaint,
+        );
+      }
+    }
 
     // Baseline.
     final axisPaint = Paint()
@@ -333,39 +434,8 @@ class _ElevationPainter extends CustomPainter {
       );
     }
 
-    // Hover indicator.
-    if (hoverDistance != null) {
-      final sample = profile.sampleAtDistance(hoverDistance!);
-      final hx = xFor(sample.distance);
-      final hy = sample.elevation != null
-          ? yFor(sample.elevation!)
-          : baselineY;
-
-      final vLinePaint = Paint()
-        ..color = AppTheme.primaryColor.withValues(alpha: 0.55)
-        ..strokeWidth = 1;
-      canvas.drawLine(
-        Offset(hx, padTop),
-        Offset(hx, baselineY),
-        vLinePaint,
-      );
-
-      // Dot.
-      final dotFill = Paint()..color = AppTheme.primaryColor;
-      final dotStroke = Paint()
-        ..color = Colors.white
-        ..strokeWidth = 2
-        ..style = PaintingStyle.stroke;
-      canvas.drawCircle(Offset(hx, hy), 4, dotFill);
-      canvas.drawCircle(Offset(hx, hy), 4, dotStroke);
-
-      // Tooltip label above.
-      final label = StringBuffer(GeoUtils.formatDistance(sample.distance));
-      if (sample.elevation != null) {
-        label.write('  ·  ${sample.elevation!.round()} m');
-      }
-      _drawPill(canvas, size, label.toString(), hx);
-    }
+    // Hover indicator lives in the separate _HoverPainter layer so
+    // cursor moves don't repaint the 45k-point curve.
   }
 
   void _drawLabel(Canvas canvas, String text, Offset anchor, Alignment align) {
@@ -409,6 +479,96 @@ class _ElevationPainter extends CustomPainter {
     );
   }
 
+  @override
+  bool shouldRepaint(covariant _CurvePainter oldDelegate) {
+    return oldDelegate.profile != profile ||
+        oldDelegate.highlightRange != highlightRange ||
+        oldDelegate.descentHighlightRange != descentHighlightRange ||
+        !_ticksEqual(oldDelegate.waypointTicks, waypointTicks);
+  }
+
+  static bool _ticksEqual(List<WaypointTick> a, List<WaypointTick> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i].distance != b[i].distance ||
+          a[i].color != b[i].color ||
+          a[i].icon != b[i].icon ||
+          a[i].offTrack != b[i].offTrack) {
+        return false;
+      }
+    }
+    return true;
+  }
+}
+
+/// Top layer of the elevation chart — only the hover crosshair (vertical
+/// line + dot + label pill). Repaints on every cursor move via the
+/// hoverDistance ValueListenable, but its work is trivial: one path,
+/// two circles, one text painter. The expensive curve raster underneath
+/// is reused via RepaintBoundary, so a 45k-point chart hovers smoothly.
+class _HoverPainter extends CustomPainter {
+  _HoverPainter({
+    required this.profile,
+    required this.hoverDistance,
+    required this.padH,
+    required this.padTop,
+    required this.padBottom,
+  });
+
+  final ElevationProfile profile;
+  final double? hoverDistance;
+  final double padH;
+  final double padTop;
+  final double padBottom;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (hoverDistance == null) return;
+    final innerW = size.width - padH * 2;
+    final innerH = size.height - padTop - padBottom;
+    if (innerW <= 0 || innerH <= 0) return;
+    final totalD = profile.totalDistance;
+    if (totalD <= 0) return;
+    final minE = profile.minElevation;
+    final maxE = profile.maxElevation;
+    final eSpan = (maxE - minE).abs() < 1 ? 1.0 : (maxE - minE);
+    final baselineY = padTop + innerH;
+
+    double xFor(double d) => padH + (d / totalD) * innerW;
+    double yFor(double e) =>
+        padTop + innerH - ((e - minE) / eSpan) * innerH;
+
+    final sample = profile.sampleAtDistance(hoverDistance!);
+    final hx = xFor(sample.distance);
+    final hy = sample.elevation != null ? yFor(sample.elevation!) : baselineY;
+
+    final vLinePaint = Paint()
+      ..color = AppTheme.primaryColor.withValues(alpha: 0.55)
+      ..strokeWidth = 1;
+    canvas.drawLine(Offset(hx, padTop), Offset(hx, baselineY), vLinePaint);
+
+    canvas.drawCircle(
+      Offset(hx, hy),
+      4,
+      Paint()..color = AppTheme.primaryColor,
+    );
+    canvas.drawCircle(
+      Offset(hx, hy),
+      4,
+      Paint()
+        ..color = Colors.white
+        ..strokeWidth = 2
+        ..style = PaintingStyle.stroke,
+    );
+
+    final label = StringBuffer(GeoUtils.formatDistance(sample.distance));
+    if (sample.elevation != null) {
+      label.write('  ·  ${sample.elevation!.round()} m');
+    }
+    _drawPill(canvas, size, label.toString(), hx);
+  }
+
   void _drawPill(Canvas canvas, Size size, String text, double x) {
     final tp = TextPainter(
       text: TextSpan(
@@ -435,25 +595,8 @@ class _ElevationPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _ElevationPainter oldDelegate) {
-    return oldDelegate.profile != profile ||
-        oldDelegate.hoverDistance != hoverDistance ||
-        oldDelegate.highlightRange != highlightRange ||
-        oldDelegate.descentHighlightRange != descentHighlightRange ||
-        !_ticksEqual(oldDelegate.waypointTicks, waypointTicks);
-  }
-
-  static bool _ticksEqual(List<WaypointTick> a, List<WaypointTick> b) {
-    if (identical(a, b)) return true;
-    if (a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) {
-      if (a[i].distance != b[i].distance ||
-          a[i].color != b[i].color ||
-          a[i].icon != b[i].icon ||
-          a[i].offTrack != b[i].offTrack) {
-        return false;
-      }
-    }
-    return true;
+  bool shouldRepaint(covariant _HoverPainter oldDelegate) {
+    return oldDelegate.hoverDistance != hoverDistance ||
+        oldDelegate.profile != profile;
   }
 }

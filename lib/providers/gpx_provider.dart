@@ -5,6 +5,7 @@ import 'package:web/web.dart' as web;
 import '../models/gpx_models.dart';
 import '../services/gpx_parser.dart';
 import '../utils/climb_detector.dart';
+import '../utils/descent_detector.dart';
 import '../utils/elevation_profile.dart';
 import '../utils/geo_utils.dart';
 
@@ -79,6 +80,64 @@ class GpxProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Per-track color overrides. The first track in a single-file load
+  /// falls back to [_routeColor]; merged tracks each get their own
+  /// distinct entry from [kRouteColorPresets] so the user can tell them
+  /// apart on the map at a glance.
+  final Map<String, Color> _trackColors = {};
+
+  /// Track IDs whose polyline + stats contribution are hidden. Stored as
+  /// IDs (rather than indices) so reordering/removing tracks doesn't
+  /// silently re-toggle which track is hidden.
+  final Set<String> _hiddenTrackIds = <String>{};
+
+  Color colorForTrack(String trackId) =>
+      _trackColors[trackId] ?? _routeColor;
+
+  void setTrackColor(String trackId, Color color) {
+    _trackColors[trackId] = color;
+    notifyListeners();
+  }
+
+  bool isTrackVisible(String trackId) => !_hiddenTrackIds.contains(trackId);
+
+  void toggleTrackVisibility(String trackId) {
+    if (_hiddenTrackIds.contains(trackId)) {
+      _hiddenTrackIds.remove(trackId);
+    } else {
+      _hiddenTrackIds.add(trackId);
+    }
+    hoverDistance.value = null;
+    _notifyProfileChanged();
+  }
+
+  /// Tracks the user currently has visible. Stats, climbs, descents and
+  /// the elevation profile all derive from this so hiding a track
+  /// removes it from the combined picture as well as the map.
+  List<GpxTrack> get visibleTracks =>
+      _data?.tracks.where((t) => isTrackVisible(t.id)).toList() ??
+      const <GpxTrack>[];
+
+  /// Assigns a unique override color to [track] from [kRouteColorPresets]
+  /// preferring entries not already used by the current data and not
+  /// equal to [_routeColor]. Falls back to cycling through the palette
+  /// when every preset is already taken.
+  void _assignAutoColor(GpxTrack track) {
+    final used = {
+      _routeColor,
+      ..._trackColors.values,
+    };
+    for (final c in kRouteColorPresets) {
+      if (!used.contains(c)) {
+        _trackColors[track.id] = c;
+        return;
+      }
+    }
+    final idx =
+        (_data?.tracks.length ?? 0) % kRouteColorPresets.length;
+    _trackColors[track.id] = kRouteColorPresets[idx];
+  }
+
   String? _selectedPointId;
   String? get selectedPointId => _selectedPointId;
 
@@ -117,17 +176,79 @@ class GpxProvider extends ChangeNotifier {
 
   bool get hasData => _data != null;
 
-  /// Ordered list of every track point across all tracks/segments, used
-  /// for profile and snap computations.
-  List<GpxTrackPoint> get _allTrackPoints =>
-      _data?.tracks.expand((t) => t.allPoints).toList() ??
-      const <GpxTrackPoint>[];
+  /// Cached profile / climbs / descents and per-waypoint projections.
+  /// Recomputing the profile on every call was the #1 hover-lag cause:
+  /// it not only re-walked 45k haversines per frame but also defeated
+  /// the map's screen-cache for the hover hit-test, which keys on
+  /// `identical(profile)` — a fresh instance per call meant the cache
+  /// was rebuilt every hover frame too. Invalidated by
+  /// [_invalidateProfileCaches] from every mutator that changes the
+  /// underlying track points or visibility.
+  ElevationProfile? _cachedProfile;
+  List<Climb>? _cachedClimbs;
+  List<Descent>? _cachedDescents;
+  final Map<String, NearestOnTrack?> _waypointProjections = {};
 
-  /// Fresh [ElevationProfile] for the current track. Cheap enough to
-  /// rebuild per call; callers that need to sample it repeatedly in a
-  /// single operation should cache locally.
-  ElevationProfile elevationProfile() =>
-      ElevationProfile.fromPoints(_allTrackPoints);
+  void _invalidateProfileCaches() {
+    _cachedProfile = null;
+    _cachedClimbs = null;
+    _cachedDescents = null;
+    _waypointProjections.clear();
+  }
+
+  /// Invalidates the cached profile/climbs/descents/projections and
+  /// fires [notifyListeners]. Use from any mutator that changes track
+  /// points or visibility. Cosmetic mutators (edit mode, color picker,
+  /// selection) should keep using bare [notifyListeners] so the cache
+  /// survives unrelated UI churn.
+  void _notifyProfileChanged() {
+    _invalidateProfileCaches();
+    notifyListeners();
+  }
+
+  /// Drops the cached projection for a single waypoint without
+  /// touching the profile/climbs caches. Used when a waypoint moves
+  /// or is renamed but the underlying track is unchanged.
+  void _invalidateWaypointProjection(String id) {
+    _waypointProjections.remove(id);
+  }
+
+  /// [ElevationProfile] across the visible tracks, cached. Built via
+  /// [ElevationProfile.fromSegments] so cumulative distance does *not*
+  /// span the gap between two merged tracks (otherwise four tracks
+  /// joined Bergen↔Voss↔…↔Oslo would inflate by hundreds of phantom km
+  /// of haversine jumps), and so climbs/descents reset at boundaries.
+  ElevationProfile elevationProfile() {
+    return _cachedProfile ??= ElevationProfile.fromSegments(
+      visibleTracks.map((t) => t.allPoints).toList(),
+    );
+  }
+
+  /// Cached climb list across the current visible profile. Mirrors
+  /// [elevationProfile] for invalidation. Use this from UI builders
+  /// instead of calling [ClimbDetector.detect] directly so a hover or
+  /// tab switch doesn't re-scan 45k points.
+  List<Climb> climbs() {
+    return _cachedClimbs ??= ClimbDetector.detect(elevationProfile());
+  }
+
+  /// Cached descent list — same caching contract as [climbs].
+  List<Descent> descents() {
+    return _cachedDescents ??= DescentDetector.detect(elevationProfile());
+  }
+
+  /// Cached per-waypoint projection onto the current track. Used by
+  /// the stats panel and elevation chart, which previously called
+  /// [ElevationProfile.nearestOnTrack] (O(N)) for every waypoint on
+  /// every Consumer rebuild — at 45k profile points × 50 waypoints
+  /// that was 2.25M haversines per stats rebuild.
+  NearestOnTrack? nearestOnTrackForWaypoint(GpxWaypoint wpt) {
+    return _waypointProjections.putIfAbsent(wpt.id, () {
+      final profile = elevationProfile();
+      if (profile.isEmpty) return null;
+      return profile.nearestOnTrack(wpt.latLng);
+    });
+  }
 
   @override
   void dispose() {
@@ -144,10 +265,95 @@ class GpxProvider extends ChangeNotifier {
       _editMode = EditMode.view;
       _selectedPointId = null;
       hoverDistance.value = null;
-      notifyListeners();
+      _trackColors.clear();
+      _hiddenTrackIds.clear();
+      // First track keeps the user's chosen routeColor (so single-file
+      // loads look identical to before). Any extra tracks shipped in
+      // the same GPX get auto-assigned distinct colors.
+      final tracks = _data!.tracks;
+      for (int i = 1; i < tracks.length; i++) {
+        _assignAutoColor(tracks[i]);
+      }
+      _notifyProfileChanged();
     } catch (e) {
       throw Exception('Failed to parse GPX file: $e');
     }
+  }
+
+  /// Parses [xml] and merges its tracks (and routes/waypoints) into the
+  /// currently loaded GpxData. Each incoming track gets a fresh,
+  /// distinct color so the user can tell merged tracks apart on the
+  /// map. Falls back to [loadFromString] when there is no current data.
+  ///
+  /// Returns the number of tracks that were appended.
+  int appendFromString(String xml, String fileName) {
+    if (_data == null) {
+      loadFromString(xml, fileName);
+      return _data?.tracks.length ?? 0;
+    }
+    try {
+      final incoming = _parser.parse(xml);
+      // Default the appended track names to the source filename when
+      // the GPX itself didn't set one — that's the only label the user
+      // has to distinguish merged tracks in the Tracks tab.
+      final stem = _fileNameStem(fileName);
+      for (int i = 0; i < incoming.tracks.length; i++) {
+        final t = incoming.tracks[i];
+        final named = (t.name == null || t.name!.trim().isEmpty)
+            ? GpxTrack(
+                id: t.id,
+                name: incoming.tracks.length == 1
+                    ? stem
+                    : '$stem (${i + 1})',
+                segments: t.segments,
+              )
+            : t;
+        _data!.tracks.add(named);
+        _assignAutoColor(named);
+      }
+      _data!.routes.addAll(incoming.routes);
+      _data!.waypoints.addAll(incoming.waypoints);
+      hoverDistance.value = null;
+      _notifyProfileChanged();
+      return incoming.tracks.length;
+    } catch (e) {
+      throw Exception('Failed to parse GPX file: $e');
+    }
+  }
+
+  /// Removes the track with [id] from the current data, along with its
+  /// visibility/color state. No-op when no data is loaded or no track
+  /// matches.
+  void removeTrack(String id) {
+    if (_data == null) return;
+    final removed = _data!.tracks.length;
+    _data!.tracks.removeWhere((t) => t.id == id);
+    if (_data!.tracks.length == removed) return;
+    _trackColors.remove(id);
+    _hiddenTrackIds.remove(id);
+    hoverDistance.value = null;
+    _notifyProfileChanged();
+  }
+
+  /// Renames the track with [id]. Used by the Tracks tab so users can
+  /// give merged tracks meaningful labels (e.g. "Day 1", "Day 2").
+  void setTrackName(String id, String name) {
+    if (_data == null) return;
+    final idx = _data!.tracks.indexWhere((t) => t.id == id);
+    if (idx == -1) return;
+    final old = _data!.tracks[idx];
+    _data!.tracks[idx] = GpxTrack(
+      id: old.id,
+      name: name.trim().isEmpty ? null : name.trim(),
+      segments: old.segments,
+    );
+    notifyListeners();
+  }
+
+  static String _fileNameStem(String fileName) {
+    final dot = fileName.lastIndexOf('.');
+    final stem = dot > 0 ? fileName.substring(0, dot) : fileName;
+    return stem.trim().isEmpty ? fileName : stem.trim();
   }
 
   String exportToString() {
@@ -168,7 +374,7 @@ class GpxProvider extends ChangeNotifier {
     _fileName = 'new_route.gpx';
     _editMode = EditMode.view;
     _selectedPointId = null;
-    notifyListeners();
+    _notifyProfileChanged();
   }
 
   void setEditMode(EditMode mode) {
@@ -214,7 +420,7 @@ class GpxProvider extends ChangeNotifier {
       segment.points.add(point);
     }
     _data = _data!.copyWith(tracks: tracks);
-    notifyListeners();
+    _notifyProfileChanged();
   }
 
   void removeTrackPoint(String id) {
@@ -225,7 +431,7 @@ class GpxProvider extends ChangeNotifier {
       }
     }
     if (_selectedPointId == id) _selectedPointId = null;
-    notifyListeners();
+    _notifyProfileChanged();
   }
 
   void moveTrackPoint(String id, LatLng newLatLng) {
@@ -235,7 +441,7 @@ class GpxProvider extends ChangeNotifier {
         final idx = seg.points.indexWhere((p) => p.id == id);
         if (idx != -1) {
           seg.points[idx] = seg.points[idx].copyWith(latLng: newLatLng);
-          notifyListeners();
+          _notifyProfileChanged();
           return;
         }
       }
@@ -249,7 +455,7 @@ class GpxProvider extends ChangeNotifier {
     if (oldIndex < newIndex) newIndex--;
     final point = segment.points.removeAt(oldIndex);
     segment.points.insert(newIndex, point);
-    notifyListeners();
+    _notifyProfileChanged();
   }
 
   // Waypoint operations
@@ -388,6 +594,7 @@ class GpxProvider extends ChangeNotifier {
       latLng: nearest.latLng,
       elevation: sample.elevation,
     );
+    _invalidateWaypointProjection(id);
     notifyListeners();
   }
 
@@ -396,9 +603,7 @@ class GpxProvider extends ChangeNotifier {
   /// track to project onto. Used by the sidebar and elevation chart to
   /// show "km from start" / off-track warnings.
   WaypointTrackInfo? waypointTrackInfo(GpxWaypoint wpt) {
-    final profile = elevationProfile();
-    if (profile.isEmpty) return null;
-    final nearest = profile.nearestOnTrack(wpt.latLng);
+    final nearest = nearestOnTrackForWaypoint(wpt);
     if (nearest == null) return null;
     return WaypointTrackInfo(
       distance: nearest.distance,
@@ -411,6 +616,7 @@ class GpxProvider extends ChangeNotifier {
     if (_data == null) return;
     _data!.waypoints.removeWhere((w) => w.id == id);
     if (_selectedPointId == id) _selectedPointId = null;
+    _invalidateWaypointProjection(id);
     notifyListeners();
   }
 
@@ -434,6 +640,7 @@ class GpxProvider extends ChangeNotifier {
       cutoff: cutoff,
       clearCutoff: clearCutoff,
     );
+    if (latLng != null) _invalidateWaypointProjection(id);
     notifyListeners();
   }
 
@@ -442,6 +649,7 @@ class GpxProvider extends ChangeNotifier {
     final idx = _data!.waypoints.indexWhere((w) => w.id == id);
     if (idx != -1) {
       _data!.waypoints[idx] = _data!.waypoints[idx].copyWith(latLng: newLatLng);
+      _invalidateWaypointProjection(id);
       notifyListeners();
     }
   }
@@ -477,7 +685,7 @@ class GpxProvider extends ChangeNotifier {
         ..addAll(reversed);
     }
     hoverDistance.value = null;
-    notifyListeners();
+    _notifyProfileChanged();
   }
 
   void updateRouteName(String name) {

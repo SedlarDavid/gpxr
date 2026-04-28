@@ -22,6 +22,17 @@ files never leave your browser. Works on desktop and mobile.
   the closest segment instead of at the end
 - Responsive layout: side-by-side editor on desktop, draggable bottom
   panel on phones
+- **Multi-file merge**: append additional GPX files into the current
+  session without losing what's loaded. Each merged track gets its own
+  color from the palette so they're easy to tell apart on the map
+- **Tracks tab**: per-track row with distance, gain/loss and point
+  count plus controls to toggle visibility, recolor, rename or remove.
+  Hidden tracks drop out of the global stats, climbs, descents and
+  elevation profile so the aggregated picture only reflects what's
+  visible
+- **Phased loading dialog**: file read → parse → optional remote
+  enrichment all share one modal with continuously-updated text, so
+  large GPX imports don't look frozen between phases
 
 ### Waypoints
 - Rich set of built-in types: aid station, medical, water, food,
@@ -72,6 +83,11 @@ files never leave your browser. Works on desktop and mobile.
   read-out of distance + elevation, and Climbs / Descents / Splits /
   Waypoints tabs side by side — for inspecting each section of the
   route without the map competing for attention
+- **Cached profile / climbs / descents / waypoint projections**: the
+  combined profile across visible tracks is built once per mutation
+  and reused, so hover and tab-switch on a 45 k-point track stay at 60
+  fps. Cosmetic state (selection, edit mode) doesn't invalidate the
+  cache
 
 ### Trace de Trail import
 - Auto-detected on import: if the GPX metadata links back to a
@@ -95,6 +111,9 @@ files never leave your browser. Works on desktop and mobile.
   the track stays readable on top of busy basemaps (e.g. the magenta
   tourist-trail dashes on the Mapy.com outdoor layer). Choice is
   persisted in localStorage
+- **Dark mode**: slate-tinted dark palette (the default) plus a sun /
+  moon toggle in the toolbar. The choice is persisted in localStorage
+  so the editor opens in the same mode every session
 
 ## Running locally
 
@@ -176,7 +195,7 @@ lib/
     waypoint_icons.dart          type → icon / color
   widgets/
     toolbar.dart                 file + edit actions
-    sidebar.dart                 stats + points / waypoints / climbs / descents / splits tabs
+    sidebar.dart                 stats + points / waypoints / tracks / climbs / descents / splits tabs
     map_view.dart                flutter_map rendering + hover
     elevation_profile_chart.dart interactive profile
     welcome_dialog.dart          first-run intro + Ko-fi link

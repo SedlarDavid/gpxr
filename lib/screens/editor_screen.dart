@@ -5,6 +5,7 @@ import '../widgets/sidebar.dart';
 import '../widgets/toolbar.dart';
 import '../widgets/welcome_dialog.dart';
 
+
 /// Below this width the side-by-side layout doesn't fit and we collapse
 /// the sidebar into a draggable bottom panel that shares the screen with
 /// the map.
@@ -17,12 +18,24 @@ class EditorScreen extends StatefulWidget {
   State<EditorScreen> createState() => _EditorScreenState();
 }
 
+/// Min/max bounds for the desktop sidebar drag-to-resize handle. The
+/// minimum keeps stat chips and tab labels legible; the cap stops the
+/// sidebar from eating the entire window.
+const double _sidebarMinWidth = 260;
+const double _sidebarMaxWidth = 720;
+const double _sidebarDefaultWidth = 340;
+
 class _EditorScreenState extends State<EditorScreen> {
   /// Mobile only — when true the bottom panel is expanded to ~70% of the
   /// screen so the user can scroll waypoint/climb/split lists; when
   /// false it collapses to a 64 px header showing route stats and a tab
   /// chooser. Persisted only for the current session.
   bool _panelExpanded = false;
+
+  /// Desktop only. Updated by the splitter on the right edge of the
+  /// sidebar. Session-only — no localStorage so a fresh load always
+  /// starts at the default; we can persist later if asked.
+  double _sidebarWidth = _sidebarDefaultWidth;
 
   @override
   void initState() {
@@ -35,20 +48,35 @@ class _EditorScreenState extends State<EditorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Scaffold(
       drawer: const GpxDrawer(),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final isMobile = constraints.maxWidth < _mobileBreakpoint;
           if (!isMobile) {
-            return const Column(
+            // Cap the sidebar so the map keeps at least 240 px of width
+            // even if the user previously dragged the splitter very far
+            // and then shrunk the window.
+            final maxAllowed =
+                (constraints.maxWidth - 240).clamp(_sidebarMinWidth, _sidebarMaxWidth);
+            final effectiveWidth = _sidebarWidth.clamp(_sidebarMinWidth, maxAllowed);
+            return Column(
               children: [
-                Toolbar(),
+                const Toolbar(),
                 Expanded(
                   child: Row(
                     children: [
-                      Sidebar(),
-                      Expanded(child: MapView()),
+                      Sidebar(width: effectiveWidth),
+                      _SidebarResizeHandle(
+                        onDrag: (delta) {
+                          setState(() {
+                            _sidebarWidth = (_sidebarWidth + delta)
+                                .clamp(_sidebarMinWidth, maxAllowed);
+                          });
+                        },
+                      ),
+                      const Expanded(child: MapView()),
                     ],
                   ),
                 ),
@@ -66,6 +94,53 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 }
 
+/// 6 px-wide vertical splitter that sits between the sidebar and the
+/// map. Drags horizontally to resize the sidebar. Renders the resize
+/// cursor on hover so the affordance is discoverable without a label.
+class _SidebarResizeHandle extends StatefulWidget {
+  const _SidebarResizeHandle({required this.onDrag});
+
+  final ValueChanged<double> onDrag;
+
+  @override
+  State<_SidebarResizeHandle> createState() => _SidebarResizeHandleState();
+}
+
+class _SidebarResizeHandleState extends State<_SidebarResizeHandle> {
+  bool _hover = false;
+  bool _dragging = false;
+
+  @override
+  Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
+    final active = _hover || _dragging;
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeColumn,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragStart: (_) => setState(() => _dragging = true),
+        onHorizontalDragEnd: (_) => setState(() => _dragging = false),
+        onHorizontalDragCancel: () => setState(() => _dragging = false),
+        onHorizontalDragUpdate: (d) => widget.onDrag(d.delta.dx),
+        child: SizedBox(
+          width: 6,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              width: active ? 3 : 1,
+              color: active
+                  ? AppTheme.primaryColor.withValues(alpha: 0.7)
+                  : AppTheme.borderColor,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MobileLayout extends StatelessWidget {
   const _MobileLayout({
     required this.expanded,
@@ -77,6 +152,7 @@ class _MobileLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Column(
       children: [
         const Toolbar(),
@@ -112,6 +188,7 @@ class _MobileSidebarPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     final mediaHeight = MediaQuery.of(context).size.height;
     // 48 here (not 44) to account for the 1 px top BoxDecoration border
     // and the inner handle's 44 px height — without the buffer the
@@ -128,7 +205,7 @@ class _MobileSidebarPanel extends StatelessWidget {
       curve: Curves.easeOutCubic,
       height: expanded ? expandedHeight : collapsedHeight,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardColor,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
         border: Border(top: BorderSide(color: AppTheme.borderColor)),
         boxShadow: [

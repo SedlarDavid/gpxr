@@ -124,6 +124,27 @@ class ClimbDetector {
     double peakEle = -double.infinity;
 
     for (int i = 0; i < profile.length; i++) {
+      // At a track boundary, commit any in-progress climb so it doesn't
+      // erroneously absorb the elevation jump from the end of one
+      // track to the start of the next, then reset state.
+      if (profile.isSegmentBreakBefore(i)) {
+        if (inClimb) {
+          final climb = _buildClimb(
+            profile,
+            climbStartIdx,
+            peakIdx,
+            climbStartEle,
+            peakEle,
+          );
+          if (climb.gain >= minGain && climb.length >= minLength) {
+            climbs.add(climb);
+          }
+          inClimb = false;
+        }
+        lowEle = null;
+        lowIdx = i;
+      }
+
       final e = profile.elevations[i];
       if (e == null) continue;
 

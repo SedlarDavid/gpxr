@@ -125,6 +125,27 @@ class DescentDetector {
     double troughEle = double.infinity;
 
     for (int i = 0; i < profile.length; i++) {
+      // At a track boundary, commit any in-progress descent and reset
+      // so the elevation jump from one track's end to the next track's
+      // start doesn't get logged as a phantom descent.
+      if (profile.isSegmentBreakBefore(i)) {
+        if (inDescent) {
+          final descent = _buildDescent(
+            profile,
+            descentStartIdx,
+            troughIdx,
+            descentStartEle,
+            troughEle,
+          );
+          if (descent.loss >= minLoss && descent.length >= minLength) {
+            descents.add(descent);
+          }
+          inDescent = false;
+        }
+        highEle = null;
+        highIdx = i;
+      }
+
       final e = profile.elevations[i];
       if (e == null) continue;
 

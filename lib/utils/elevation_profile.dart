@@ -5,6 +5,14 @@ import '../models/gpx_models.dart';
 import 'geo_utils.dart';
 
 /// Cumulative elevation / distance profile of a polyline.
+///
+/// When built from multiple tracks (via [fromSegments]) the profile
+/// records [segmentStarts] — the indices that begin a new track. The
+/// haversine distance between the end of one track and the start of
+/// the next is *not* added to the cumulative distance (otherwise
+/// merging four geographically separate tracks would inflate total
+/// distance by hundreds of km of phantom inter-track jumps), and
+/// climb/descent detectors treat those indices as hard breaks.
 class ElevationProfile {
   ElevationProfile._({
     required this.points,
@@ -14,6 +22,7 @@ class ElevationProfile {
     required this.minElevation,
     required this.maxElevation,
     required this.hasElevation,
+    required this.segmentStarts,
   });
 
   final List<GpxTrackPoint> points;
@@ -25,8 +34,19 @@ class ElevationProfile {
   final double maxElevation;
   final bool hasElevation;
 
+  /// Indices at which a new sub-track begins. Always contains 0 (when
+  /// the profile is non-empty). For a single-track profile this is
+  /// just `[0]`. Used by the climb/descent detectors to reset state at
+  /// boundaries and by the profile chart to render visual breaks.
+  final List<int> segmentStarts;
+
   bool get isEmpty => points.isEmpty;
   int get length => points.length;
+
+  /// True when [segmentStarts] indicates [index] is the first point of
+  /// a new sub-track (other than the very first point of the profile).
+  bool isSegmentBreakBefore(int index) =>
+      index > 0 && segmentStarts.contains(index);
 
   static final ElevationProfile empty = ElevationProfile._(
     points: const [],
@@ -36,19 +56,41 @@ class ElevationProfile {
     minElevation: 0,
     maxElevation: 0,
     hasElevation: false,
+    segmentStarts: const [],
   );
 
-  static ElevationProfile fromPoints(List<GpxTrackPoint> pts) {
-    if (pts.isEmpty) return empty;
+  static ElevationProfile fromPoints(List<GpxTrackPoint> pts) =>
+      fromSegments([pts]);
 
-    final distances = List<double>.filled(pts.length, 0);
+  /// Builds a profile from a list of tracks (or any list of point
+  /// runs). Distance accumulates within each run but does *not* span
+  /// the gap between runs.
+  static ElevationProfile fromSegments(List<List<GpxTrackPoint>> segments) {
+    final flat = <GpxTrackPoint>[];
+    final segStarts = <int>[];
+    for (final seg in segments) {
+      if (seg.isEmpty) continue;
+      segStarts.add(flat.length);
+      flat.addAll(seg);
+    }
+    if (flat.isEmpty) return empty;
+
+    final distances = List<double>.filled(flat.length, 0);
     double total = 0;
-    for (int i = 1; i < pts.length; i++) {
-      total += GeoUtils.distanceBetween(pts[i - 1].latLng, pts[i].latLng);
+    final boundarySet = segStarts.toSet();
+    for (int i = 1; i < flat.length; i++) {
+      if (boundarySet.contains(i)) {
+        // Crossing into a new sub-track — keep the cumulative distance
+        // but skip the haversine jump to the previous track's last
+        // point.
+        distances[i] = total;
+        continue;
+      }
+      total += GeoUtils.distanceBetween(flat[i - 1].latLng, flat[i].latLng);
       distances[i] = total;
     }
 
-    final elevations = pts.map((p) => p.elevation).toList();
+    final elevations = flat.map((p) => p.elevation).toList();
     double minEle = double.infinity;
     double maxEle = -double.infinity;
     bool hasEle = false;
@@ -64,13 +106,14 @@ class ElevationProfile {
     }
 
     return ElevationProfile._(
-      points: pts,
+      points: flat,
       distances: distances,
       elevations: elevations,
       totalDistance: total,
       minElevation: minEle,
       maxElevation: maxEle,
       hasElevation: hasEle,
+      segmentStarts: List.unmodifiable(segStarts),
     );
   }
 
@@ -124,7 +167,12 @@ class ElevationProfile {
     double projX(double lng) => (lng - p.longitude) * mPerDegLng;
     double projY(double lat) => (lat - p.latitude) * mPerDegLat;
 
+    final boundary = segmentStarts.toSet();
     for (int i = 0; i < points.length - 1; i++) {
+      // Skip the virtual segment that would otherwise span a track
+      // boundary — there is no real polyline between the end of one
+      // track and the start of the next.
+      if (boundary.contains(i + 1)) continue;
       final ax = projX(points[i].latLng.longitude);
       final ay = projY(points[i].latLng.latitude);
       final bx = projX(points[i + 1].latLng.longitude);

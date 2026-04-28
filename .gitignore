@@ -40,6 +40,9 @@ app.*.symbols
 # Local secrets — commit env.example.json, not env.json
 env.json
 
+# Flutter DevTools per-checkout settings — auto-regenerated when DevTools opens
+devtools_options.yaml
+
 # Claude Code local cache
 .claude/
 

@@ -4,7 +4,6 @@ import '../models/gpx_models.dart';
 import '../providers/gpx_provider.dart';
 import '../utils/climb_detector.dart';
 import '../utils/descent_detector.dart';
-import '../utils/elevation_profile.dart';
 import '../utils/geo_utils.dart';
 import '../utils/theme.dart';
 import '../utils/waypoint_icons.dart';
@@ -13,37 +12,44 @@ import 'elevation_profile_chart.dart';
 import 'profile_detail_view.dart';
 
 class Sidebar extends StatelessWidget {
-  const Sidebar({super.key, this.mobile = false});
+  const Sidebar({super.key, this.mobile = false, this.width});
 
   /// When true the sidebar fills the parent's width (used in the mobile
-  /// bottom-sheet layout) instead of being a fixed 340px-wide column with
-  /// a right divider.
+  /// bottom-sheet layout) instead of being a fixed 340px-wide column
+  /// with a right divider.
   final bool mobile;
+
+  /// Desktop-only override for the sidebar's width. Ignored when
+  /// [mobile] is true. Defaults to 340 when unset.
+  final double? width;
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Consumer<GpxProvider>(
       builder: (context, provider, _) {
         if (!provider.hasData) {
-          return _EmptyState(mobile: mobile);
+          return _EmptyState(mobile: mobile, width: width);
         }
-        return _SidebarContent(mobile: mobile);
+        return _SidebarContent(mobile: mobile, width: width);
       },
     );
   }
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({this.mobile = false});
+  const _EmptyState({this.mobile = false, this.width});
 
   final bool mobile;
+  final double? width;
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Container(
-      width: mobile ? null : 340,
+      width: mobile ? null : (width ?? 340),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardColor,
         border: mobile
             ? null
             : Border(right: BorderSide(color: AppTheme.borderColor)),
@@ -86,9 +92,10 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _SidebarContent extends StatefulWidget {
-  const _SidebarContent({this.mobile = false});
+  const _SidebarContent({this.mobile = false, this.width});
 
   final bool mobile;
+  final double? width;
 
   @override
   State<_SidebarContent> createState() => _SidebarContentState();
@@ -101,7 +108,7 @@ class _SidebarContentState extends State<_SidebarContent>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
   }
 
   @override
@@ -112,27 +119,24 @@ class _SidebarContentState extends State<_SidebarContent>
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Container(
-      width: widget.mobile ? null : 340,
+      width: widget.mobile ? null : (widget.width ?? 340),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardColor,
         border: widget.mobile
             ? null
             : Border(right: BorderSide(color: AppTheme.borderColor)),
       ),
       child: Column(
         children: [
-          // _RouteStats has fixed-height sub-widgets (badge row + chart)
-          // that, on a short mobile bottom-sheet, can exceed the panel
-          // height. Wrap it in Flexible+SingleChildScrollView so the
-          // header gracefully scrolls instead of throwing a layout
-          // overflow exception.
-          Flexible(
-            fit: FlexFit.loose,
-            child: SingleChildScrollView(
-              child: const _RouteStats(),
-            ),
-          ),
+          // _RouteStats sits inline (no Flexible/SCV wrapper) so it
+          // takes only its intrinsic height and the Expanded TabBarView
+          // below gets every remaining pixel. Wrapping it in
+          // Flexible(loose) used to leave white space at the bottom of
+          // the list because Flexible competes with Expanded for half
+          // the column's free space and the loose half went unused.
+          const _RouteStats(),
           const Divider(height: 1),
           TabBar(
             controller: _tabController,
@@ -144,6 +148,7 @@ class _SidebarContentState extends State<_SidebarContent>
             indicatorSize: TabBarIndicatorSize.tab,
             labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             tabs: const [
+              Tab(text: 'Tracks'),
               Tab(text: 'Points'),
               Tab(text: 'Waypoints'),
               Tab(text: 'Climbs'),
@@ -156,6 +161,7 @@ class _SidebarContentState extends State<_SidebarContent>
             child: TabBarView(
               controller: _tabController,
               children: const [
+                TracksList(),
                 _TrackPointsList(),
                 WaypointsList(),
                 ClimbsList(),
@@ -175,19 +181,40 @@ class _RouteStats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Consumer<GpxProvider>(
       builder: (context, provider, _) {
         final data = provider.data!;
-        final trackPoints = data.tracks.expand((t) => t.allPoints).toList();
-        final routeLatLngs = data.allLinePoints;
-        final distance = GeoUtils.totalDistance(routeLatLngs);
-        final gain = GeoUtils.totalElevationGain(trackPoints);
-        final loss = GeoUtils.totalElevationLoss(trackPoints);
-        final profile = ElevationProfile.fromPoints(trackPoints);
+        // Sum per-track stats rather than computing on a flattened
+        // point list. Concatenating tracks across the Bergen↔Voss↔Oslo
+        // boundaries used to add ~500 km of phantom haversine distance
+        // and a phantom 1000+ m climb where one track's last point
+        // jumped to the next track's first point.
+        final visible = provider.visibleTracks;
+        double distance = 0;
+        double gain = 0;
+        double loss = 0;
+        int trackPointCount = 0;
+        for (final track in visible) {
+          final pts = track.allPoints;
+          trackPointCount += pts.length;
+          distance += GeoUtils.totalDistance(
+            pts.map((p) => p.latLng).toList(growable: false),
+          );
+          gain += GeoUtils.totalElevationGain(pts);
+          loss += GeoUtils.totalElevationLoss(pts);
+        }
+        // Routes (rte) still get their distance added since they're a
+        // single polyline, but they're rare in this UI's main flow.
+        distance += GeoUtils.totalDistance(data.allRoutePoints);
+        final profile = provider.elevationProfile();
         final ticks = <WaypointTick>[];
         if (!profile.isEmpty) {
           for (final wpt in data.waypoints) {
-            final nearest = profile.nearestOnTrack(wpt.latLng);
+            // Cached per-waypoint projection — was the dominant cost
+            // here at 45k profile points × N waypoints (each call is
+            // an O(N) haversine scan over the polyline).
+            final nearest = provider.nearestOnTrackForWaypoint(wpt);
             if (nearest == null) continue;
             ticks.add(WaypointTick(
               distance: nearest.distance,
@@ -210,6 +237,12 @@ class _RouteStats extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            // Take only the natural intrinsic height of the children,
+            // never the parent's full height. Without this, when this
+            // widget is placed unwrapped in another Column, the inner
+            // Column would default to mainAxisSize.max and try to grow
+            // forever / steal space from the list below.
+            mainAxisSize: MainAxisSize.min,
             children: [
               Row(
                 children: [
@@ -262,7 +295,7 @@ class _RouteStats extends StatelessWidget {
                 children: [
                   _StatChip(
                     icon: Icons.location_on_rounded,
-                    label: '${trackPoints.length} pts',
+                    label: '$trackPointCount pts',
                     tooltip: 'Track points',
                   ),
                   const SizedBox(width: 8),
@@ -288,7 +321,7 @@ class _RouteStats extends StatelessWidget {
                     top: 0,
                     right: 0,
                     child: Material(
-                      color: Colors.white.withValues(alpha: 0.92),
+                      color: AppTheme.cardColor.withValues(alpha: 0.92),
                       borderRadius: BorderRadius.circular(6),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(6),
@@ -378,6 +411,7 @@ class _StatChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Tooltip(
       message: tooltip,
       child: Container(
@@ -406,11 +440,400 @@ class _StatChip extends StatelessWidget {
   }
 }
 
+/// Per-track summary tab. Lists every track in the loaded data with its
+/// distance, elevation gain/loss and point count, plus controls to
+/// toggle visibility, recolor, rename or remove the track. The point
+/// of this view is to make a multi-file merge legible: each imported
+/// GPX shows up as its own row with its own color, and the global
+/// stats panel above the tab bar already aggregates the visible ones.
+class TracksList extends StatelessWidget {
+  const TracksList({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
+    return Consumer<GpxProvider>(
+      builder: (context, provider, _) {
+        final tracks = provider.data?.tracks ?? const <GpxTrack>[];
+        if (tracks.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.route_rounded,
+                    size: 32,
+                    color: AppTheme.textSecondary.withValues(alpha: 0.4),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No tracks loaded',
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Use Import GPX or Merge GPX from the menu to add tracks.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(0, 4, 0, 64),
+          itemCount: tracks.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 2),
+          itemBuilder: (context, index) {
+            final track = tracks[index];
+            final points = track.allPoints;
+            final latLngs = points.map((p) => p.latLng).toList();
+            final distance = GeoUtils.totalDistance(latLngs);
+            final gain = GeoUtils.totalElevationGain(points);
+            final loss = GeoUtils.totalElevationLoss(points);
+            return _TrackTile(
+              track: track,
+              index: index,
+              distance: distance,
+              gain: gain,
+              loss: loss,
+              pointCount: points.length,
+              color: provider.colorForTrack(track.id),
+              visible: provider.isTrackVisible(track.id),
+              canDelete: tracks.length > 1,
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _TrackTile extends StatelessWidget {
+  const _TrackTile({
+    required this.track,
+    required this.index,
+    required this.distance,
+    required this.gain,
+    required this.loss,
+    required this.pointCount,
+    required this.color,
+    required this.visible,
+    required this.canDelete,
+  });
+
+  final GpxTrack track;
+  final int index;
+  final double distance;
+  final double gain;
+  final double loss;
+  final int pointCount;
+  final Color color;
+  final bool visible;
+
+  /// Last surviving track has no delete button — removing the only
+  /// track would leave the data with nothing to render and there's no
+  /// "create empty track" pathway out of that state from this tab.
+  final bool canDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
+    final provider = context.read<GpxProvider>();
+    final displayName = (track.name == null || track.name!.trim().isEmpty)
+        ? 'Track ${index + 1}'
+        : track.name!.trim();
+    final dim = visible ? 1.0 : 0.45;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      padding: const EdgeInsets.fromLTRB(10, 10, 6, 10),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppTheme.borderColor.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Opacity(
+        opacity: dim,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _ColorSwatchButton(
+                  color: color,
+                  onTap: () => _pickColor(context, provider),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    displayName,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(
+                    visible
+                        ? Icons.visibility_rounded
+                        : Icons.visibility_off_rounded,
+                    size: 16,
+                  ),
+                  onPressed: () => provider.toggleTrackVisibility(track.id),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                  tooltip: visible ? 'Hide track' : 'Show track',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit_rounded, size: 14),
+                  onPressed: () => _renameTrack(context, provider, displayName),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                  tooltip: 'Rename track',
+                ),
+                if (canDelete)
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 14),
+                    onPressed: () => _confirmRemove(context, provider, displayName),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 28, minHeight: 28),
+                    tooltip: 'Remove track',
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _ClimbStat(
+                  icon: Icons.straighten_rounded,
+                  label: GeoUtils.formatDistance(distance),
+                  tooltip: 'Distance',
+                ),
+                const SizedBox(width: 6),
+                _ClimbStat(
+                  icon: Icons.trending_up_rounded,
+                  label: '+${gain.round()} m',
+                  tooltip: 'Elevation gain',
+                  color: const Color(0xFF22C55E),
+                ),
+                const SizedBox(width: 6),
+                _ClimbStat(
+                  icon: Icons.trending_down_rounded,
+                  label: '\u2212${loss.round()} m',
+                  tooltip: 'Elevation loss',
+                  color: const Color(0xFFEF4444),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(Icons.circle, size: 7, color: AppTheme.textSecondary),
+                const SizedBox(width: 4),
+                Text(
+                  '$pointCount pts',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                if (track.segments.length > 1) ...[
+                  const SizedBox(width: 10),
+                  Icon(Icons.timeline_rounded, size: 11, color: AppTheme.textSecondary),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${track.segments.length} segments',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _pickColor(BuildContext context, GpxProvider provider) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Track color',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+        content: SizedBox(
+          width: 280,
+          child: Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: kRouteColorPresets.map((c) {
+              final selected = c == color;
+              return InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () {
+                  provider.setTrackColor(track.id, c);
+                  Navigator.pop(ctx);
+                },
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: c,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: selected ? Colors.black : Colors.transparent,
+                      width: 2,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _renameTrack(
+    BuildContext context,
+    GpxProvider provider,
+    String currentName,
+  ) {
+    final controller = TextEditingController(text: currentName);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Rename track',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Track name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              provider.setTrackName(track.id, controller.text);
+              Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmRemove(
+    BuildContext context,
+    GpxProvider provider,
+    String displayName,
+  ) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Remove track?',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+        content: Text('Remove "$displayName" from this view? This does '
+            'not affect the original GPX file on disk.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+            ),
+            onPressed: () {
+              provider.removeTrack(track.id);
+              Navigator.pop(ctx);
+            },
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ColorSwatchButton extends StatelessWidget {
+  const _ColorSwatchButton({required this.color, required this.onTap});
+
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
+    return Tooltip(
+      message: 'Change color',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: onTap,
+        child: Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: Colors.black.withValues(alpha: 0.15),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _TrackPointsList extends StatelessWidget {
   const _TrackPointsList();
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Consumer<GpxProvider>(
       builder: (context, provider, _) {
         final data = provider.data!;
@@ -456,7 +879,7 @@ class _TrackPointsList extends StatelessWidget {
               color: Colors.transparent,
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AppTheme.cardColor,
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.1),
@@ -513,6 +936,7 @@ class _TrackPointTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -603,6 +1027,7 @@ class WaypointsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Consumer<GpxProvider>(
       builder: (context, provider, _) {
         final waypoints = provider.data!.waypoints;
@@ -658,7 +1083,7 @@ class WaypointsList extends StatelessWidget {
               color: Colors.transparent,
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AppTheme.cardColor,
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.1),
@@ -674,7 +1099,9 @@ class WaypointsList extends StatelessWidget {
           itemBuilder: (context, index) {
             final wpt = waypoints[index];
             final isSelected = wpt.id == provider.selectedPointId;
-            final nearest = profile.isEmpty ? null : profile.nearestOnTrack(wpt.latLng);
+            final nearest = profile.isEmpty
+                ? null
+                : provider.nearestOnTrackForWaypoint(wpt);
             final onTrack = nearest != null &&
                 nearest.distanceToLineMeters <= GpxProvider.snapTolerance;
             return _WaypointTile(
@@ -828,6 +1255,7 @@ class _WaypointTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     final color = WaypointIcons.colorFor(waypoint.type);
     final icon = WaypointIcons.iconFor(waypoint.type);
 
@@ -960,6 +1388,7 @@ class ClimbsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Consumer<GpxProvider>(
       builder: (context, provider, _) {
         final profile = provider.elevationProfile();
@@ -970,7 +1399,7 @@ class ClimbsList extends StatelessWidget {
             subtitle: 'Import a GPX with elevation to see climb analysis.',
           );
         }
-        final climbs = ClimbDetector.detect(profile);
+        final climbs = provider.climbs();
         if (climbs.isEmpty) {
           return _ClimbsEmpty(
             icon: Icons.landscape_rounded,
@@ -1009,6 +1438,7 @@ class _ClimbsEmpty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -1051,6 +1481,7 @@ class _ClimbTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     final avgPct = climb.averageGrade * 100;
     final maxPct = climb.maxGrade * 100;
     final gradeColor = _gradeColor(avgPct, activity);
@@ -1257,12 +1688,13 @@ class _ClimbStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Tooltip(
       message: tooltip,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppTheme.cardColor,
           borderRadius: BorderRadius.circular(5),
           border: Border.all(
             color: AppTheme.borderColor.withValues(alpha: 0.5),
@@ -1298,6 +1730,7 @@ class DescentsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Consumer<GpxProvider>(
       builder: (context, provider, _) {
         final profile = provider.elevationProfile();
@@ -1308,7 +1741,7 @@ class DescentsList extends StatelessWidget {
             subtitle: 'Import a GPX with elevation to see descent analysis.',
           );
         }
-        final descents = DescentDetector.detect(profile);
+        final descents = provider.descents();
         if (descents.isEmpty) {
           return _ClimbsEmpty(
             icon: Icons.trending_down_rounded,
@@ -1347,6 +1780,7 @@ class _DescentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     final avgPct = descent.averageGrade * 100;
     final maxPct = descent.maxGrade * 100;
     // Reuse the climb grade ramp — steepness is steepness regardless of
@@ -1535,6 +1969,7 @@ class SplitsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppTheme.subscribe(context);
     return Consumer<GpxProvider>(
       builder: (context, provider, _) {
         final data = provider.data;
@@ -1554,9 +1989,7 @@ class SplitsList extends StatelessWidget {
                 '(Tools menu).',
           );
         }
-        final trackPoints =
-            data.tracks.expand((t) => t.allPoints).toList(growable: false);
-        final profile = ElevationProfile.fromPoints(trackPoints);
+        final profile = provider.elevationProfile();
         if (profile.isEmpty) {
           return const _ClimbsEmpty(
             icon: Icons.flag_rounded,
@@ -1567,7 +2000,7 @@ class SplitsList extends StatelessWidget {
 
         final rows = <_SplitRow>[];
         for (final wpt in data.waypoints) {
-          final nearest = profile.nearestOnTrack(wpt.latLng);
+          final nearest = provider.nearestOnTrackForWaypoint(wpt);
           if (nearest == null) continue;
           rows.add(_SplitRow(
             name: _firstNonBlank(wpt.name) ?? _defaultName(wpt.type),
