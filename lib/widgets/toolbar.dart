@@ -75,11 +75,7 @@ class Toolbar extends StatelessWidget {
             ),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Icon(
-            Icons.route_rounded,
-            color: Colors.white,
-            size: 18,
-          ),
+          child: const Icon(Icons.route_rounded, color: Colors.white, size: 18),
         ),
         if (!compact) ...[
           const SizedBox(width: 10),
@@ -206,9 +202,7 @@ class _ThemeToggleButton extends StatelessWidget {
       builder: (_, mode, _) {
         final dark = mode == ThemeMode.dark;
         return IconButton(
-          icon: Icon(
-            dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-          ),
+          icon: Icon(dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
           tooltip: dark ? 'Switch to light mode' : 'Switch to dark mode',
           visualDensity: VisualDensity.compact,
           onPressed: AppTheme.toggleMode,
@@ -301,32 +295,28 @@ class GpxDrawer extends StatelessWidget {
                           _DrawerItem(
                             icon: Icons.add_rounded,
                             label: 'New route',
-                            onTap: () => run(
-                              (ctx) => _confirmNew(ctx, provider),
-                            ),
+                            onTap: () =>
+                                run((ctx) => _confirmNew(ctx, provider)),
                           ),
                           _DrawerItem(
                             icon: Icons.file_open_rounded,
                             label: 'Import GPX…',
-                            onTap: () => run(
-                              (ctx) => _importFile(ctx, provider),
-                            ),
+                            onTap: () =>
+                                run((ctx) => _importFile(ctx, provider)),
                           ),
                           _DrawerItem(
                             icon: Icons.library_add_rounded,
                             label: 'Merge GPX…',
                             enabled: hasData,
-                            onTap: () => run(
-                              (ctx) => _appendFiles(ctx, provider),
-                            ),
+                            onTap: () =>
+                                run((ctx) => _appendFiles(ctx, provider)),
                           ),
                           _DrawerItem(
                             icon: Icons.download_rounded,
                             label: 'Export GPX',
                             enabled: hasData,
-                            onTap: () => run(
-                              (ctx) => _exportFile(ctx, provider),
-                            ),
+                            onTap: () =>
+                                run((ctx) => _exportFile(ctx, provider)),
                           ),
                           const SizedBox(height: 8),
                           _DrawerSection(label: 'Waypoints'),
@@ -346,10 +336,7 @@ class GpxDrawer extends StatelessWidget {
                             label: 'Auto-create from climbs',
                             enabled: hasData,
                             onTap: () => run(
-                              (ctx) => _autoWaypointsFromClimbs(
-                                ctx,
-                                provider,
-                              ),
+                              (ctx) => _autoWaypointsFromClimbs(ctx, provider),
                             ),
                           ),
                           _DrawerItem(
@@ -357,10 +344,8 @@ class GpxDrawer extends StatelessWidget {
                             label: 'Import from Trace de Trail…',
                             enabled: hasData,
                             onTap: () => run(
-                              (ctx) => _importTraceDeTrailWaypoints(
-                                ctx,
-                                provider,
-                              ),
+                              (ctx) =>
+                                  _importTraceDeTrailWaypoints(ctx, provider),
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -437,11 +422,7 @@ class _DrawerItem extends StatelessWidget {
       leading: Icon(icon, size: 20, color: fg),
       title: Text(
         label,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          color: fg,
-        ),
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: fg),
       ),
       onTap: enabled ? onTap : null,
       dense: true,
@@ -454,432 +435,442 @@ Future<void> _autoWaypointsFromClimbs(
   BuildContext context,
   GpxProvider provider,
 ) async {
-    final added = provider.autoWaypointsFromClimbs();
-    if (!context.mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    if (added == 0) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('No new climbs found to mark'),
-          backgroundColor: Color(0xFFF59E0B),
-        ),
-      );
-      return;
-    }
+  final added = provider.autoWaypointsFromClimbs();
+  if (!context.mounted) return;
+  final messenger = ScaffoldMessenger.of(context);
+  if (added == 0) {
     messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          'Added $added summit waypoint${added == 1 ? '' : 's'}',
-        ),
-        backgroundColor: const Color(0xFF22C55E),
-        duration: const Duration(seconds: 3),
+      const SnackBar(
+        content: Text('No new climbs found to mark'),
+        backgroundColor: Color(0xFFF59E0B),
       ),
     );
+    return;
   }
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text('Added $added summit waypoint${added == 1 ? '' : 's'}'),
+      backgroundColor: const Color(0xFF22C55E),
+      duration: const Duration(seconds: 3),
+    ),
+  );
+}
 
-  void _confirmNew(BuildContext context, GpxProvider provider) {
-    if (!provider.hasData) {
-      provider.createNew();
-      return;
-    }
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'New Route',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        content: const Text(
-          'Create a new empty route? Unsaved changes will be lost.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              provider.createNew();
-              Navigator.pop(ctx);
-            },
-            child: const Text('Create New'),
-          ),
-        ],
+void _confirmNew(BuildContext context, GpxProvider provider) {
+  if (!provider.hasData) {
+    provider.createNew();
+    return;
+  }
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text(
+        'New Route',
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
       ),
+      content: const Text(
+        'Create a new empty route? Unsaved changes will be lost.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            provider.createNew();
+            Navigator.pop(ctx);
+          },
+          child: const Text('Create New'),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<void> _importFile(BuildContext context, GpxProvider provider) async {
+  final controller = _LoadingController(context);
+  try {
+    // Show the dialog BEFORE opening the picker. The OS picker will
+    // sit on top of it while it's open, but the moment the user
+    // confirms (or cancels) and the picker dismisses, our dialog is
+    // already mounted and visible — covering the silent file_picker
+    // bytes-read phase that previously showed no feedback at all.
+    // We await an actual frame so the dialog is painted before the
+    // synchronous picker call yields control.
+    controller.show('Opening file…');
+    await WidgetsBinding.instance.endOfFrame;
+
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['gpx', 'xml'],
+      withData: true,
+      // Multi-pick lets the user load a multi-day trip in one go: the
+      // first file replaces whatever's loaded, and the rest get
+      // merged in as additional tracks with their own colors.
+      allowMultiple: true,
+      onFileLoading: (status) {
+        if (status == FilePickerStatus.picking) {
+          controller.update('Reading file…');
+        }
+      },
     );
-  }
 
-  Future<void> _importFile(BuildContext context, GpxProvider provider) async {
-    final controller = _LoadingController(context);
-    try {
-      // Show the dialog BEFORE opening the picker. The OS picker will
-      // sit on top of it while it's open, but the moment the user
-      // confirms (or cancels) and the picker dismisses, our dialog is
-      // already mounted and visible — covering the silent file_picker
-      // bytes-read phase that previously showed no feedback at all.
-      // We await an actual frame so the dialog is painted before the
-      // synchronous picker call yields control.
-      controller.show('Opening file…');
-      await WidgetsBinding.instance.endOfFrame;
+    if (result == null || result.files.isEmpty) return;
+    final files = result.files.where((f) => f.bytes != null).toList();
+    if (files.isEmpty) return;
+    if (!context.mounted) return;
 
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['gpx', 'xml'],
-        withData: true,
-        // Multi-pick lets the user load a multi-day trip in one go: the
-        // first file replaces whatever's loaded, and the rest get
-        // merged in as additional tracks with their own colors.
-        allowMultiple: true,
-        onFileLoading: (status) {
-          if (status == FilePickerStatus.picking) {
-            controller.update('Reading file…');
-          }
-        },
-      );
+    final firstFile = files.first;
+    await controller.runTask(
+      message: files.length == 1
+          ? 'Parsing ${firstFile.name}…'
+          : 'Parsing 1 of ${files.length}: ${firstFile.name}…',
+      task: () async {
+        final content = utf8.decode(firstFile.bytes!);
+        provider.loadFromString(content, firstFile.name);
+        for (int i = 1; i < files.length; i++) {
+          final f = files[i];
+          controller.update('Parsing ${i + 1} of ${files.length}: ${f.name}…');
+          // Yield a frame between files so the message visibly
+          // updates instead of jumping from "1 of 4" straight to
+          // dismissed when the loop finishes.
+          await WidgetsBinding.instance.endOfFrame;
+          final c = utf8.decode(f.bytes!);
+          provider.appendFromString(c, f.name);
+        }
+      },
+    );
 
-      if (result == null || result.files.isEmpty) return;
-      final files = result.files.where((f) => f.bytes != null).toList();
-      if (files.isEmpty) return;
-      if (!context.mounted) return;
-
-      final firstFile = files.first;
-      await controller.runTask(
-        message: files.length == 1
-            ? 'Parsing ${firstFile.name}…'
-            : 'Parsing 1 of ${files.length}: ${firstFile.name}…',
-        task: () async {
-          final content = utf8.decode(firstFile.bytes!);
-          provider.loadFromString(content, firstFile.name);
-          for (int i = 1; i < files.length; i++) {
-            final f = files[i];
-            controller.update('Parsing ${i + 1} of ${files.length}: ${f.name}…');
-            // Yield a frame between files so the message visibly
-            // updates instead of jumping from "1 of 4" straight to
-            // dismissed when the loop finishes.
-            await WidgetsBinding.instance.endOfFrame;
-            final c = utf8.decode(f.bytes!);
-            provider.appendFromString(c, f.name);
-          }
-        },
-      );
-
-      // Detect sources we know how to enrich and offer an auto-import.
-      // Skip when we merged multiple files — the prompt assumes one
-      // primary source URL and the user is in bulk-load mode anyway.
-      if (!context.mounted) return;
-      if (files.length == 1) {
-        final sourceUrl = provider.data?.sourceUrl;
-        if (sourceUrl != null &&
-            TraceDeTrailImporter.extractTraceId(sourceUrl) != null) {
-          final accepted = await _askEnrichFromTraceDeTrail(context, sourceUrl);
-          if (accepted == true && context.mounted) {
-            await _fetchAndImportWaypoints(context, provider, sourceUrl);
-          }
+    // Detect sources we know how to enrich and offer an auto-import.
+    // Skip when we merged multiple files — the prompt assumes one
+    // primary source URL and the user is in bulk-load mode anyway.
+    if (!context.mounted) return;
+    if (files.length == 1) {
+      final sourceUrl = provider.data?.sourceUrl;
+      if (sourceUrl != null &&
+          TraceDeTrailImporter.extractTraceId(sourceUrl) != null) {
+        final accepted = await _askEnrichFromTraceDeTrail(context, sourceUrl);
+        if (accepted == true && context.mounted) {
+          await _fetchAndImportWaypoints(context, provider, sourceUrl);
         }
       }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to import file: $e'),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
-        );
-      }
-    } finally {
-      controller.dismiss();
-      controller.dispose();
     }
-  }
-
-  /// Picks one or more GPX files and merges every track into the
-  /// currently loaded data without replacing it. Falls back to a
-  /// regular import when nothing is loaded yet.
-  Future<void> _appendFiles(BuildContext context, GpxProvider provider) async {
-    if (!provider.hasData) {
-      await _importFile(context, provider);
-      return;
-    }
-    final controller = _LoadingController(context);
-    try {
-      controller.show('Opening file…');
-      await WidgetsBinding.instance.endOfFrame;
-
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['gpx', 'xml'],
-        withData: true,
-        allowMultiple: true,
-        onFileLoading: (status) {
-          if (status == FilePickerStatus.picking) {
-            controller.update('Reading file…');
-          }
-        },
-      );
-      if (result == null || result.files.isEmpty) return;
-      final files = result.files.where((f) => f.bytes != null).toList();
-      if (files.isEmpty) return;
-      if (!context.mounted) return;
-      int added = 0;
-      await controller.runTask(
-        message: files.length == 1
-            ? 'Merging ${files.first.name}…'
-            : 'Merging 1 of ${files.length}: ${files.first.name}…',
-        task: () async {
-          for (int i = 0; i < files.length; i++) {
-            final f = files[i];
-            if (i > 0) {
-              controller.update(
-                'Merging ${i + 1} of ${files.length}: ${f.name}…',
-              );
-              await WidgetsBinding.instance.endOfFrame;
-            }
-            final c = utf8.decode(f.bytes!);
-            added += provider.appendFromString(c, f.name);
-          }
-        },
-      );
-      if (!context.mounted) return;
+  } catch (e) {
+    if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Merged $added track${added == 1 ? '' : 's'} '
-            'from ${files.length} file${files.length == 1 ? '' : 's'}',
-          ),
-          backgroundColor: const Color(0xFF22C55E),
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to merge file: $e'),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
-        );
-      }
-    }
-  }
-
-  /// Shown after a GPX file is loaded when we detect the source is a
-  /// Trace de Trail race page. Tells the user what's about to happen
-  /// and lets them opt out — returning false keeps the track as-is.
-  Future<bool?> _askEnrichFromTraceDeTrail(
-    BuildContext context,
-    String sourceUrl,
-  ) {
-    return showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Trace de Trail detected',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        content: SizedBox(
-          width: 440,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                "This GPX was exported from Trace de Trail, which strips "
-                "the waypoints (aid stations, medical points, checkpoints, "
-                "time controls…) when you download it. We can fetch them "
-                "straight from the race page and snap them onto your track.",
-                style: TextStyle(fontSize: 13),
-              ),
-              const SizedBox(height: 10),
-              SelectableText(
-                sourceUrl,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Color(0xFF6B7280),
-                  fontFamily: 'monospace',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Skip'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Import waypoints'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _importTraceDeTrailWaypoints(
-    BuildContext context,
-    GpxProvider provider,
-  ) async {
-    final urlController = TextEditingController(
-      text: provider.data?.sourceUrl ?? '',
-    );
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Import waypoints from Trace de Trail',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        content: SizedBox(
-          width: 440,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                "Trace de Trail's downloadable GPX doesn't include aid "
-                'stations or checkpoints. Paste the race page URL to pull '
-                'them in and snap them onto your track.',
-                style: TextStyle(fontSize: 12),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: urlController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Race page URL',
-                  hintText: 'https://tracedetrail.fr/en/trace/302881',
-                ),
-                onSubmitted: (v) => Navigator.pop(ctx, v),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, urlController.text),
-            child: const Text('Import'),
-          ),
-        ],
-      ),
-    );
-
-    if (result == null || result.trim().isEmpty) return;
-    if (!context.mounted) return;
-    await _fetchAndImportWaypoints(context, provider, result);
-  }
-
-  /// Shared fetch-and-merge pipeline used by both the manual URL dialog
-  /// and the auto-detection path triggered after a file import. Shows a
-  /// blocking loading dialog while the network call is in flight and
-  /// surfaces success / error as a snackbar once it's done.
-  Future<void> _fetchAndImportWaypoints(
-    BuildContext context,
-    GpxProvider provider,
-    String urlOrId,
-  ) async {
-    final messenger = ScaffoldMessenger.of(context);
-    int? added;
-    Object? error;
-    final controller = _LoadingController(context);
-    try {
-      await controller.runTask(
-        message: 'Fetching waypoints from Trace de Trail…',
-        task: () async {
-          try {
-            final importer = TraceDeTrailImporter();
-            final waypoints = await importer.fetchWaypoints(urlOrId);
-            added = provider.importWaypoints(waypoints);
-          } catch (e) {
-            error = e;
-          }
-        },
-      );
-    } finally {
-      controller.dismiss();
-      controller.dispose();
-    }
-
-    if (error != null) {
-      final msg = error is TraceDeTrailImportException
-          ? (error as TraceDeTrailImportException).message
-          : error.toString();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Import failed: $msg'),
+          content: Text('Failed to import file: $e'),
           backgroundColor: const Color(0xFFEF4444),
         ),
       );
-      return;
     }
-    if (added == 0) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('No waypoints found on that page'),
-          backgroundColor: Color(0xFFF59E0B),
-        ),
-      );
-      return;
-    }
-    messenger.showSnackBar(
+  } finally {
+    controller.dismiss();
+    controller.dispose();
+  }
+}
+
+/// Picks one or more GPX files and merges every track into the
+/// currently loaded data without replacing it. Falls back to a
+/// regular import when nothing is loaded yet.
+Future<void> _appendFiles(BuildContext context, GpxProvider provider) async {
+  if (!provider.hasData) {
+    await _importFile(context, provider);
+    return;
+  }
+  final controller = _LoadingController(context);
+  try {
+    controller.show('Opening file…');
+    await WidgetsBinding.instance.endOfFrame;
+
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['gpx', 'xml'],
+      withData: true,
+      allowMultiple: true,
+      onFileLoading: (status) {
+        if (status == FilePickerStatus.picking) {
+          controller.update('Reading file…');
+        }
+      },
+    );
+    if (result == null || result.files.isEmpty) return;
+    final files = result.files.where((f) => f.bytes != null).toList();
+    if (files.isEmpty) return;
+    if (!context.mounted) return;
+    int added = 0;
+    await controller.runTask(
+      message: files.length == 1
+          ? 'Merging ${files.first.name}…'
+          : 'Merging 1 of ${files.length}: ${files.first.name}…',
+      task: () async {
+        for (int i = 0; i < files.length; i++) {
+          final f = files[i];
+          if (i > 0) {
+            controller.update(
+              'Merging ${i + 1} of ${files.length}: ${f.name}…',
+            );
+            await WidgetsBinding.instance.endOfFrame;
+          }
+          final c = utf8.decode(f.bytes!);
+          added += provider.appendFromString(c, f.name);
+        }
+      },
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Imported $added waypoint${added == 1 ? '' : 's'}'),
+        content: Text(
+          'Merged $added track${added == 1 ? '' : 's'} '
+          'from ${files.length} file${files.length == 1 ? '' : 's'}',
+        ),
         backgroundColor: const Color(0xFF22C55E),
         duration: const Duration(seconds: 3),
       ),
     );
-  }
-
-
-  void _openFeatureRequest() {
-    web.window.open(
-      'https://github.com/SedlarDavid/gpxr/issues/new'
-          '?labels=enhancement'
-          '&title=Feature%20request%3A%20',
-      '_blank',
-    );
-  }
-
-  void _exportFile(BuildContext context, GpxProvider provider) {
-    try {
-      final xml = provider.exportToString();
-      final bytes = utf8.encode(xml);
-      final blob = web.Blob(
-        [bytes.toJS].toJS,
-        web.BlobPropertyBag(type: 'application/gpx+xml'),
-      );
-      final url = web.URL.createObjectURL(blob);
-      final fileName = provider.fileName ?? 'route.gpx';
-
-      final anchor = web.HTMLAnchorElement()
-        ..href = url
-        ..download = fileName;
-      anchor.click();
-
-      web.URL.revokeObjectURL(url);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('GPX file exported successfully'),
-          backgroundColor: Color(0xFF22C55E),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    } catch (e) {
+  } catch (e) {
+    if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to export: $e'),
+          content: Text('Failed to merge file: $e'),
           backgroundColor: const Color(0xFFEF4444),
         ),
       );
     }
   }
+}
+
+/// Shown after a GPX file is loaded when we detect the source is a
+/// Trace de Trail race page. Tells the user what's about to happen
+/// and lets them opt out — returning false keeps the track as-is.
+Future<bool?> _askEnrichFromTraceDeTrail(
+  BuildContext context,
+  String sourceUrl,
+) {
+  return showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text(
+        'Trace de Trail detected',
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+      ),
+      content: SizedBox(
+        width: 440,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "This GPX was exported from Trace de Trail, which strips "
+              "the waypoints (aid stations, medical points, checkpoints, "
+              "time controls…) when you download it. We can fetch them "
+              "straight from the race page and snap them onto your track.",
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 10),
+            SelectableText(
+              sourceUrl,
+              style: const TextStyle(
+                fontSize: 11,
+                color: Color(0xFF6B7280),
+                fontFamily: 'monospace',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Skip'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Import waypoints'),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<void> _importTraceDeTrailWaypoints(
+  BuildContext context,
+  GpxProvider provider,
+) async {
+  final urlController = TextEditingController(
+    text: provider.data?.sourceUrl ?? '',
+  );
+  final result = await showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text(
+        'Import waypoints from Trace de Trail',
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+      ),
+      content: SizedBox(
+        width: 440,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Trace de Trail's downloadable GPX doesn't include aid "
+              'stations or checkpoints. Paste the race page URL to pull '
+              'them in and snap them onto your track.',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: urlController,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Race page URL',
+                hintText: 'https://tracedetrail.fr/en/trace/302881',
+              ),
+              onSubmitted: (v) => Navigator.pop(ctx, v),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, urlController.text),
+          child: const Text('Import'),
+        ),
+      ],
+    ),
+  );
+
+  if (result == null || result.trim().isEmpty) return;
+  if (!context.mounted) return;
+  await _fetchAndImportWaypoints(context, provider, result);
+}
+
+/// Shared fetch-and-merge pipeline used by both the manual URL dialog
+/// and the auto-detection path triggered after a file import. Shows a
+/// blocking loading dialog while the network call is in flight and
+/// surfaces success / error as a snackbar once it's done.
+Future<void> _fetchAndImportWaypoints(
+  BuildContext context,
+  GpxProvider provider,
+  String urlOrId,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  int? added;
+  Object? error;
+  final controller = _LoadingController(context);
+  try {
+    await controller.runTask(
+      message: 'Fetching waypoints from Trace de Trail…',
+      task: () async {
+        try {
+          final importer = TraceDeTrailImporter();
+          final waypoints = await importer.fetchWaypoints(urlOrId);
+          added = provider.importWaypoints(waypoints);
+        } catch (e) {
+          error = e;
+        }
+      },
+    );
+  } finally {
+    controller.dismiss();
+    controller.dispose();
+  }
+
+  if (error != null) {
+    final msg = error is TraceDeTrailImportException
+        ? (error as TraceDeTrailImportException).message
+        : error.toString();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Import failed: $msg'),
+        backgroundColor: const Color(0xFFEF4444),
+      ),
+    );
+    return;
+  }
+  if (added == 0) {
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('No waypoints found on that page'),
+        backgroundColor: Color(0xFFF59E0B),
+      ),
+    );
+    return;
+  }
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text('Imported $added waypoint${added == 1 ? '' : 's'}'),
+      backgroundColor: const Color(0xFF22C55E),
+      duration: const Duration(seconds: 3),
+    ),
+  );
+}
+
+void _openFeatureRequest() {
+  web.window.open(
+    'https://github.com/SedlarDavid/gpxr/issues/new'
+        '?labels=enhancement'
+        '&title=Feature%20request%3A%20',
+    '_blank',
+  );
+}
+
+void _exportFile(BuildContext context, GpxProvider provider) {
+  try {
+    final xml = provider.exportToString();
+    final bytes = utf8.encode(xml);
+    final blob = web.Blob(
+      [bytes.toJS].toJS,
+      web.BlobPropertyBag(type: 'application/gpx+xml'),
+    );
+    final url = web.URL.createObjectURL(blob);
+    final fileName = _gpxFileName(provider.fileName);
+
+    final anchor = web.HTMLAnchorElement()
+      ..href = url
+      ..download = fileName;
+    anchor.click();
+
+    web.URL.revokeObjectURL(url);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('GPX file exported successfully'),
+        backgroundColor: Color(0xFF22C55E),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Failed to export: $e'),
+        backgroundColor: const Color(0xFFEF4444),
+      ),
+    );
+  }
+}
+
+/// Forces a `.gpx` extension regardless of the source filename. Prevents
+/// re-exporting a file imported as `route.xml` from going back out as
+/// `route.xml`, which leaves users wondering why the download isn't a
+/// real GPX.
+String _gpxFileName(String? source) {
+  final raw = (source ?? '').trim();
+  if (raw.isEmpty) return 'route.gpx';
+  final dot = raw.lastIndexOf('.');
+  final stem = dot > 0 ? raw.substring(0, dot) : raw;
+  final clean = stem.trim().isEmpty ? 'route' : stem.trim();
+  return '$clean.gpx';
+}
 
 class _ActivityToggle extends StatelessWidget {
   const _ActivityToggle({
@@ -1130,10 +1121,7 @@ class _LoadingDialog extends StatelessWidget {
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(fontSize: 13),
-              ),
+              child: Text(message, style: const TextStyle(fontSize: 13)),
             ),
           ],
         ),

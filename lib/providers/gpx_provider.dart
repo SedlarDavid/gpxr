@@ -75,8 +75,10 @@ class GpxProvider extends ChangeNotifier {
     // Color.toARGB32() is the modern replacement for the deprecated
     // .value getter; storing as a base-10 int keeps the localStorage
     // entry trivially round-trippable across reloads.
-    web.window.localStorage
-        .setItem(_routeColorStorageKey, c.toARGB32().toString());
+    web.window.localStorage.setItem(
+      _routeColorStorageKey,
+      c.toARGB32().toString(),
+    );
     notifyListeners();
   }
 
@@ -91,8 +93,7 @@ class GpxProvider extends ChangeNotifier {
   /// silently re-toggle which track is hidden.
   final Set<String> _hiddenTrackIds = <String>{};
 
-  Color colorForTrack(String trackId) =>
-      _trackColors[trackId] ?? _routeColor;
+  Color colorForTrack(String trackId) => _trackColors[trackId] ?? _routeColor;
 
   void setTrackColor(String trackId, Color color) {
     _trackColors[trackId] = color;
@@ -123,18 +124,14 @@ class GpxProvider extends ChangeNotifier {
   /// equal to [_routeColor]. Falls back to cycling through the palette
   /// when every preset is already taken.
   void _assignAutoColor(GpxTrack track) {
-    final used = {
-      _routeColor,
-      ..._trackColors.values,
-    };
+    final used = {_routeColor, ..._trackColors.values};
     for (final c in kRouteColorPresets) {
       if (!used.contains(c)) {
         _trackColors[track.id] = c;
         return;
       }
     }
-    final idx =
-        (_data?.tracks.length ?? 0) % kRouteColorPresets.length;
+    final idx = (_data?.tracks.length ?? 0) % kRouteColorPresets.length;
     _trackColors[track.id] = kRouteColorPresets[idx];
   }
 
@@ -271,6 +268,21 @@ class GpxProvider extends ChangeNotifier {
       // loads look identical to before). Any extra tracks shipped in
       // the same GPX get auto-assigned distinct colors.
       final tracks = _data!.tracks;
+      // Single-track GPX often puts the route name only in <metadata>
+      // and leaves <trk><name> empty. Mirror it onto the track so the
+      // sidebar and re-export carry the name instead of "Track 1".
+      final dataName = _data!.name?.trim();
+      if (tracks.length == 1 &&
+          dataName != null &&
+          dataName.isNotEmpty &&
+          (tracks[0].name == null || tracks[0].name!.trim().isEmpty)) {
+        final old = tracks[0];
+        tracks[0] = GpxTrack(
+          id: old.id,
+          name: dataName,
+          segments: old.segments,
+        );
+      }
       for (int i = 1; i < tracks.length; i++) {
         _assignAutoColor(tracks[i]);
       }
@@ -302,9 +314,7 @@ class GpxProvider extends ChangeNotifier {
         final named = (t.name == null || t.name!.trim().isEmpty)
             ? GpxTrack(
                 id: t.id,
-                name: incoming.tracks.length == 1
-                    ? stem
-                    : '$stem (${i + 1})',
+                name: incoming.tracks.length == 1 ? stem : '$stem (${i + 1})',
                 segments: t.segments,
               )
             : t;
@@ -365,10 +375,7 @@ class GpxProvider extends ChangeNotifier {
     _data = GpxData(
       name: 'New Route',
       tracks: [
-        GpxTrack(
-          name: 'Track 1',
-          segments: [GpxTrackSegment()],
-        ),
+        GpxTrack(name: 'Track 1', segments: [GpxTrackSegment()]),
       ],
     );
     _fileName = 'new_route.gpx';
@@ -407,10 +414,7 @@ class GpxProvider extends ChangeNotifier {
     if (_data == null) return;
     final tracks = _data!.tracks;
     if (tracks.isEmpty) {
-      tracks.add(GpxTrack(
-        name: 'Track 1',
-        segments: [GpxTrackSegment()],
-      ));
+      tracks.add(GpxTrack(name: 'Track 1', segments: [GpxTrackSegment()]));
     }
     final segment = tracks.first.segments.first;
     final point = GpxTrackPoint(latLng: latLng);
@@ -480,7 +484,9 @@ class GpxProvider extends ChangeNotifier {
     final wpt = GpxWaypoint(
       latLng: resolved,
       elevation: elevation,
-      name: name ?? '${(type ?? _selectedWaypointType).label} ${_data!.waypoints.length + 1}',
+      name:
+          name ??
+          '${(type ?? _selectedWaypointType).label} ${_data!.waypoints.length + 1}',
       type: type ?? _selectedWaypointType,
       cutoff: cutoff,
     );
@@ -654,6 +660,25 @@ class GpxProvider extends ChangeNotifier {
     }
   }
 
+  /// Slides an existing waypoint along the track to the given cumulative
+  /// distance (meters), updating its lat/lng and elevation from the track
+  /// sample. No-op when there's no track to project onto.
+  void moveWaypointToDistance(String id, double meters) {
+    if (_data == null) return;
+    final idx = _data!.waypoints.indexWhere((w) => w.id == id);
+    if (idx == -1) return;
+    final profile = elevationProfile();
+    if (profile.isEmpty) return;
+    final clamped = meters.clamp(0, profile.totalDistance).toDouble();
+    final sample = profile.sampleAtDistance(clamped);
+    _data!.waypoints[idx] = _data!.waypoints[idx].copyWith(
+      latLng: sample.latLng,
+      elevation: sample.elevation,
+    );
+    _invalidateWaypointProjection(id);
+    notifyListeners();
+  }
+
   void reorderWaypoints(int oldIndex, int newIndex) {
     if (_data == null) return;
     if (oldIndex < newIndex) newIndex--;
@@ -715,7 +740,10 @@ class GpxProvider extends ChangeNotifier {
     for (int i = 0; i < segment.points.length - 1; i++) {
       final a = segment.points[i].latLng;
       final b = segment.points[i + 1].latLng;
-      final mid = LatLng((a.latitude + b.latitude) / 2, (a.longitude + b.longitude) / 2);
+      final mid = LatLng(
+        (a.latitude + b.latitude) / 2,
+        (a.longitude + b.longitude) / 2,
+      );
       final d = distance.as(LengthUnit.Meter, latLng, mid);
       if (d < bestDist) {
         bestDist = d;

@@ -67,41 +67,44 @@ class _ProfileDetailViewState extends State<ProfileDetailView>
           for (final wpt in data.waypoints) {
             final nearest = profile.nearestOnTrack(wpt.latLng);
             if (nearest == null) continue;
-            ticks.add(WaypointTick(
-              distance: nearest.distance,
-              color: WaypointIcons.colorFor(wpt.type),
-              icon: WaypointIcons.iconFor(wpt.type),
-              offTrack:
-                  nearest.distanceToLineMeters > GpxProvider.snapTolerance,
-            ));
+            ticks.add(
+              WaypointTick(
+                distance: nearest.distance,
+                color: WaypointIcons.colorFor(wpt.type),
+                icon: WaypointIcons.iconFor(wpt.type),
+                offTrack:
+                    nearest.distanceToLineMeters > GpxProvider.snapTolerance,
+              ),
+            );
           }
         }
 
         return Scaffold(
           appBar: AppBar(
-            backgroundColor: Colors.white,
+            backgroundColor: AppTheme.cardColor,
             foregroundColor: AppTheme.textPrimary,
             elevation: 0,
             title: Text(
               data.name?.trim().isNotEmpty == true
                   ? data.name!
                   : 'Elevation profile',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
+                color: AppTheme.textPrimary,
               ),
             ),
-            shape: Border(
-              bottom: BorderSide(color: AppTheme.borderColor),
-            ),
+            shape: Border(bottom: BorderSide(color: AppTheme.borderColor)),
           ),
           body: LayoutBuilder(
             builder: (context, constraints) {
               // Allocate ~45% of available height to the chart so even
               // on a tall desktop window it stays readable but on
               // phones it doesn't crowd out the lists below.
-              final chartHeight =
-                  (constraints.maxHeight * 0.45).clamp(220.0, 420.0);
+              final chartHeight = (constraints.maxHeight * 0.45).clamp(
+                220.0,
+                420.0,
+              );
               return Column(
                 children: [
                   Padding(
@@ -182,8 +185,11 @@ class _HoverReadout extends StatelessWidget {
           color: AppTheme.surfaceColor,
           child: Row(
             children: [
-              Icon(Icons.straighten_rounded,
-                  size: 14, color: AppTheme.textSecondary),
+              Icon(
+                Icons.straighten_rounded,
+                size: 14,
+                color: AppTheme.textSecondary,
+              ),
               const SizedBox(width: 6),
               Text(
                 sample == null
@@ -196,8 +202,11 @@ class _HoverReadout extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 16),
-              Icon(Icons.terrain_rounded,
-                  size: 14, color: AppTheme.textSecondary),
+              Icon(
+                Icons.terrain_rounded,
+                size: 14,
+                color: AppTheme.textSecondary,
+              ),
               const SizedBox(width: 6),
               Text(
                 sample?.elevation == null
@@ -213,10 +222,7 @@ class _HoverReadout extends StatelessWidget {
               const Spacer(),
               Text(
                 'Hover or drag the chart to inspect',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppTheme.textSecondary,
-                ),
+                style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
               ),
             ],
           ),

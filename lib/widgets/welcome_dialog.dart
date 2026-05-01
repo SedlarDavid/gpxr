@@ -82,10 +82,7 @@ class _WelcomeDialogState extends State<_WelcomeDialog> {
                 const SizedBox(width: 12),
                 const Text(
                   'Welcome to GPXR',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
               ],
             ),
@@ -103,12 +100,14 @@ class _WelcomeDialogState extends State<_WelcomeDialog> {
             ),
             const _FeatureBullet(
               icon: Icons.landscape_rounded,
-              text: 'Interactive elevation profile with climb detection and '
+              text:
+                  'Interactive elevation profile with climb detection and '
                   'cycling-style category badges.',
             ),
             const _FeatureBullet(
               icon: Icons.public_rounded,
-              text: 'One-click Trace de Trail waypoint import (Tools → Import '
+              text:
+                  'One-click Trace de Trail waypoint import (Tools → Import '
                   'waypoints from Trace de Trail).',
             ),
             const _FeatureBullet(

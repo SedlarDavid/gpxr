@@ -188,23 +188,15 @@ class GpxWaypoint {
 }
 
 class GpxTrackPoint {
-  GpxTrackPoint({
-    String? id,
-    required this.latLng,
-    this.elevation,
-    this.time,
-  }) : id = id ?? _uuid.v4();
+  GpxTrackPoint({String? id, required this.latLng, this.elevation, this.time})
+    : id = id ?? _uuid.v4();
 
   final String id;
   final LatLng latLng;
   final double? elevation;
   final DateTime? time;
 
-  GpxTrackPoint copyWith({
-    LatLng? latLng,
-    double? elevation,
-    DateTime? time,
-  }) {
+  GpxTrackPoint copyWith({LatLng? latLng, double? elevation, DateTime? time}) {
     return GpxTrackPoint(
       id: id,
       latLng: latLng ?? this.latLng,
@@ -215,23 +207,18 @@ class GpxTrackPoint {
 }
 
 class GpxTrackSegment {
-  GpxTrackSegment({
-    String? id,
-    List<GpxTrackPoint>? points,
-  })  : id = id ?? _uuid.v4(),
-        points = points ?? [];
+  GpxTrackSegment({String? id, List<GpxTrackPoint>? points})
+    : id = id ?? _uuid.v4(),
+      points = points ?? [];
 
   final String id;
   final List<GpxTrackPoint> points;
 }
 
 class GpxTrack {
-  GpxTrack({
-    String? id,
-    this.name,
-    List<GpxTrackSegment>? segments,
-  })  : id = id ?? _uuid.v4(),
-        segments = segments ?? [];
+  GpxTrack({String? id, this.name, List<GpxTrackSegment>? segments})
+    : id = id ?? _uuid.v4(),
+      segments = segments ?? [];
 
   final String id;
   final String? name;
@@ -242,12 +229,9 @@ class GpxTrack {
 }
 
 class GpxRoute {
-  GpxRoute({
-    String? id,
-    this.name,
-    List<GpxTrackPoint>? points,
-  })  : id = id ?? _uuid.v4(),
-        points = points ?? [];
+  GpxRoute({String? id, this.name, List<GpxTrackPoint>? points})
+    : id = id ?? _uuid.v4(),
+      points = points ?? [];
 
   final String id;
   final String? name;
@@ -263,9 +247,9 @@ class GpxData {
     List<GpxWaypoint>? waypoints,
     List<GpxTrack>? tracks,
     List<GpxRoute>? routes,
-  })  : waypoints = waypoints ?? [],
-        tracks = tracks ?? [],
-        routes = routes ?? [];
+  }) : waypoints = waypoints ?? [],
+       tracks = tracks ?? [],
+       routes = routes ?? [];
 
   final String? name;
   final String? description;

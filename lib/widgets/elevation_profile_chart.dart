@@ -16,9 +16,11 @@ class WaypointTick {
   /// Cumulative distance (meters) along the track.
   final double distance;
   final Color color;
+
   /// Material icon drawn in a pill at the top of the tick so the user can
   /// recognise waypoint types at a glance on the elevation profile.
   final IconData icon;
+
   /// Renders as a hollow, dashed-style marker so users can tell off-track
   /// waypoints (e.g. a landmark placed beside the trail) from snapped ones.
   final bool offTrack;
@@ -37,6 +39,7 @@ class ElevationProfileChart extends StatelessWidget {
 
   final ElevationProfile profile;
   final ValueNotifier<double?> hoverDistance;
+
   /// Ticks drawn along the baseline at each waypoint's cumulative distance,
   /// so the user can see at-a-glance where aid stations, peaks, etc. fall
   /// along the elevation profile.
@@ -76,13 +79,8 @@ class ElevationProfileChart extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
-          profile.isEmpty
-              ? 'No track points'
-              : 'No elevation data',
-          style: TextStyle(
-            fontSize: 11,
-            color: AppTheme.textSecondary,
-          ),
+          profile.isEmpty ? 'No track points' : 'No elevation data',
+          style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
         ),
       );
     }
@@ -239,8 +237,7 @@ class _CurvePainter extends CustomPainter {
     if (totalD <= 0) return;
 
     double xFor(double d) => padH + (d / totalD) * innerW;
-    double yFor(double e) =>
-        padTop + innerH - ((e - minE) / eSpan) * innerH;
+    double yFor(double e) => padTop + innerH - ((e - minE) / eSpan) * innerH;
 
     // Baseline at the bottom of the inner area.
     final baselineY = padTop + innerH;
@@ -399,11 +396,7 @@ class _CurvePainter extends CustomPainter {
       final tickPaint = Paint()
         ..color = tick.color.withValues(alpha: 0.45)
         ..strokeWidth = 1;
-      canvas.drawLine(
-        Offset(tx, pillBottom),
-        Offset(tx, baselineY),
-        tickPaint,
-      );
+      canvas.drawLine(Offset(tx, pillBottom), Offset(tx, baselineY), tickPaint);
 
       // Icon pill at the top of the tick.
       final pillRect = RRect.fromRectAndRadius(
@@ -411,10 +404,7 @@ class _CurvePainter extends CustomPainter {
         const Radius.circular(pillR),
       );
       if (tick.offTrack) {
-        canvas.drawRRect(
-          pillRect,
-          Paint()..color = Colors.white,
-        );
+        canvas.drawRRect(pillRect, Paint()..color = Colors.white);
         canvas.drawRRect(
           pillRect,
           Paint()
@@ -536,8 +526,7 @@ class _HoverPainter extends CustomPainter {
     final baselineY = padTop + innerH;
 
     double xFor(double d) => padH + (d / totalD) * innerW;
-    double yFor(double e) =>
-        padTop + innerH - ((e - minE) / eSpan) * innerH;
+    double yFor(double e) => padTop + innerH - ((e - minE) / eSpan) * innerH;
 
     final sample = profile.sampleAtDistance(hoverDistance!);
     final hx = xFor(sample.distance);

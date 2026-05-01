@@ -5,7 +5,6 @@ import '../widgets/sidebar.dart';
 import '../widgets/toolbar.dart';
 import '../widgets/welcome_dialog.dart';
 
-
 /// Below this width the side-by-side layout doesn't fit and we collapse
 /// the sidebar into a draggable bottom panel that shares the screen with
 /// the map.
@@ -58,9 +57,14 @@ class _EditorScreenState extends State<EditorScreen> {
             // Cap the sidebar so the map keeps at least 240 px of width
             // even if the user previously dragged the splitter very far
             // and then shrunk the window.
-            final maxAllowed =
-                (constraints.maxWidth - 240).clamp(_sidebarMinWidth, _sidebarMaxWidth);
-            final effectiveWidth = _sidebarWidth.clamp(_sidebarMinWidth, maxAllowed);
+            final maxAllowed = (constraints.maxWidth - 240).clamp(
+              _sidebarMinWidth,
+              _sidebarMaxWidth,
+            );
+            final effectiveWidth = _sidebarWidth.clamp(
+              _sidebarMinWidth,
+              maxAllowed,
+            );
             return Column(
               children: [
                 const Toolbar(),
@@ -71,8 +75,10 @@ class _EditorScreenState extends State<EditorScreen> {
                       _SidebarResizeHandle(
                         onDrag: (delta) {
                           setState(() {
-                            _sidebarWidth = (_sidebarWidth + delta)
-                                .clamp(_sidebarMinWidth, maxAllowed);
+                            _sidebarWidth = (_sidebarWidth + delta).clamp(
+                              _sidebarMinWidth,
+                              maxAllowed,
+                            );
                           });
                         },
                       ),
@@ -85,8 +91,7 @@ class _EditorScreenState extends State<EditorScreen> {
           }
           return _MobileLayout(
             expanded: _panelExpanded,
-            onToggle: () =>
-                setState(() => _panelExpanded = !_panelExpanded),
+            onToggle: () => setState(() => _panelExpanded = !_panelExpanded),
           );
         },
       ),
@@ -142,10 +147,7 @@ class _SidebarResizeHandleState extends State<_SidebarResizeHandle> {
 }
 
 class _MobileLayout extends StatelessWidget {
-  const _MobileLayout({
-    required this.expanded,
-    required this.onToggle,
-  });
+  const _MobileLayout({required this.expanded, required this.onToggle});
 
   final bool expanded;
   final VoidCallback onToggle;
@@ -178,10 +180,7 @@ class _MobileLayout extends StatelessWidget {
 }
 
 class _MobileSidebarPanel extends StatelessWidget {
-  const _MobileSidebarPanel({
-    required this.expanded,
-    required this.onToggle,
-  });
+  const _MobileSidebarPanel({required this.expanded, required this.onToggle});
 
   final bool expanded;
   final VoidCallback onToggle;
@@ -277,9 +276,7 @@ class _MobileSidebarPanel extends StatelessWidget {
             // ListView didn't reliably reach its scroll extent when
             // wrapped that way — pushing the inset into the panel's
             // own Column avoids the issue.
-            SizedBox(
-              height: MediaQuery.of(context).viewPadding.bottom,
-            ),
+            SizedBox(height: MediaQuery.of(context).viewPadding.bottom),
           ],
         ],
       ),

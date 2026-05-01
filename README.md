@@ -44,6 +44,10 @@ files never leave your browser. Works on desktop and mobile.
 - **Add by km**: enter a distance from the race brief instead of
   hunting for the spot on the map (drawer menu → Add by km, or the
   "Add by km" button on the empty waypoints state)
+- **Edit by km**: the waypoint edit dialog exposes the projected
+  distance along the track — change the number to slide the waypoint
+  along the route, useful when a race brief is updated and an aid
+  station shifts a few hundred metres
 - **Cutoff times**: optional per-waypoint cutoff (e.g. `12:30` or
   `4:15:00`) shown in the waypoint list and splits table, round-tripped
   through GPX `<extensions>` so other tools just ignore them

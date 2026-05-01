@@ -45,10 +45,7 @@ Future<void> showAddWaypointByDistanceDialog(
             children: [
               Text(
                 'Track length: ${totalKm.toStringAsFixed(2)} km',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppTheme.textSecondary,
-                ),
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -65,9 +62,7 @@ Future<void> showAddWaypointByDistanceDialog(
               const SizedBox(height: 12),
               TextField(
                 controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Name (optional)',
-                ),
+                decoration: const InputDecoration(labelText: 'Name (optional)'),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -88,9 +83,8 @@ Future<void> showAddWaypointByDistanceDialog(
                   return FilterChip(
                     selected: isActive,
                     label: Text(type.label),
-                    onSelected: (_) => setDialogState(
-                      () => selectedType = type,
-                    ),
+                    onSelected: (_) =>
+                        setDialogState(() => selectedType = type),
                   );
                 }).toList(),
               ),

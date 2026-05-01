@@ -17,7 +17,8 @@ import '../models/gpx_models.dart';
 /// maps each entry to our [GpxWaypoint] model so the user can merge them
 /// into an imported GPX.
 class TraceDeTrailImporter {
-  TraceDeTrailImporter({http.Client? client}) : _client = client ?? http.Client();
+  TraceDeTrailImporter({http.Client? client})
+    : _client = client ?? http.Client();
 
   final http.Client _client;
 
@@ -224,13 +225,15 @@ class TraceDeTrailImporter {
       }
       if (i == 0) name = '$name$etaSuffix';
 
-      waypoints.add(GpxWaypoint(
-        latLng: latLng,
-        elevation: ele,
-        name: name,
-        description: i == 0 ? description : null,
-        type: wpType,
-      ));
+      waypoints.add(
+        GpxWaypoint(
+          latLng: latLng,
+          elevation: ele,
+          name: name,
+          description: i == 0 ? description : null,
+          type: wpType,
+        ),
+      );
     }
     return waypoints;
   }

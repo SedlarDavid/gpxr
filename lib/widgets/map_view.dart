@@ -24,8 +24,7 @@ class MapView extends StatefulWidget {
 enum _MapLayer { standard, outdoor }
 
 class _MapViewState extends State<MapView> {
-  static const String _mapyApiKey =
-      String.fromEnvironment('MAPY_API_KEY');
+  static const String _mapyApiKey = String.fromEnvironment('MAPY_API_KEY');
   static bool get _hasMapyKey => _mapyApiKey.isNotEmpty;
 
   final MapController _mapController = MapController();
@@ -107,7 +106,8 @@ class _MapViewState extends State<MapView> {
 
   void _ensureScreenCache(ElevationProfile profile) {
     final camera = _mapController.camera;
-    final cacheValid = _screenXs != null &&
+    final cacheValid =
+        _screenXs != null &&
         identical(_screenCacheProfile, profile) &&
         _screenCacheZoom == camera.zoom &&
         _screenCacheCenter == camera.center &&
@@ -289,8 +289,13 @@ class _MapViewState extends State<MapView> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Add Waypoint', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            'Add Waypoint',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
           content: SizedBox(
             width: 360,
             child: Column(
@@ -384,13 +389,14 @@ class _MapViewState extends State<MapView> {
         _maybeAutoFit(data, provider.fileName);
 
         final profile = provider.elevationProfile();
-        final hoverEnabled = provider.editMode == EditMode.view &&
-            profile.length >= 2;
+        final hoverEnabled =
+            provider.editMode == EditMode.view && profile.length >= 2;
 
         return MouseRegion(
           cursor: cursorStyle,
           onHover: hoverEnabled
-              ? (e) => _updateHoverFromCursor(e.localPosition, profile, provider)
+              ? (e) =>
+                    _updateHoverFromCursor(e.localPosition, profile, provider)
               : null,
           onExit: (_) => _clearHover(provider),
           child: Stack(
@@ -410,7 +416,8 @@ class _MapViewState extends State<MapView> {
                     _clearHover(provider);
                   },
                   interactionOptions: const InteractionOptions(
-                    flags: InteractiveFlag.drag |
+                    flags:
+                        InteractiveFlag.drag |
                         InteractiveFlag.flingAnimation |
                         InteractiveFlag.pinchZoom |
                         InteractiveFlag.doubleTapZoom |
@@ -511,7 +518,9 @@ class _MapViewState extends State<MapView> {
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.25),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.25,
+                                      ),
                                       blurRadius: 4,
                                       offset: const Offset(0, 1),
                                     ),
@@ -618,7 +627,10 @@ class _MapViewState extends State<MapView> {
                   right: 0,
                   child: Center(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(20),
@@ -739,9 +751,7 @@ class _MapViewState extends State<MapView> {
                 Icons.navigation_rounded,
                 size: 16,
                 color: color.withValues(alpha: 0.9),
-                shadows: const [
-                  Shadow(color: Colors.white, blurRadius: 2),
-                ],
+                shadows: const [Shadow(color: Colors.white, blurRadius: 2)],
               ),
             ),
           ),
@@ -868,7 +878,9 @@ class _MapViewState extends State<MapView> {
                   onPanUpdate: (details) {
                     if (_draggingPointId != null) {
                       final renderBox = context.findRenderObject() as RenderBox;
-                      final localPos = renderBox.globalToLocal(details.globalPosition);
+                      final localPos = renderBox.globalToLocal(
+                        details.globalPosition,
+                      );
                       final point = _mapController.camera.pointToLatLng(
                         math.Point(localPos.dx, localPos.dy),
                       );
@@ -881,8 +893,8 @@ class _MapViewState extends State<MapView> {
                       color: provider.editMode == EditMode.deletePoint
                           ? const Color(0xFFEF4444)
                           : isSelected
-                              ? AppTheme.primaryColor
-                              : Colors.white,
+                          ? AppTheme.primaryColor
+                          : Colors.white,
                       border: Border.all(
                         color: provider.editMode == EditMode.deletePoint
                             ? const Color(0xFFEF4444)
@@ -955,7 +967,9 @@ class _MapViewState extends State<MapView> {
             onPanUpdate: (details) {
               if (_draggingPointId != null && _isDraggingWaypoint) {
                 final renderBox = context.findRenderObject() as RenderBox;
-                final localPos = renderBox.globalToLocal(details.globalPosition);
+                final localPos = renderBox.globalToLocal(
+                  details.globalPosition,
+                );
                 final point = _mapController.camera.pointToLatLng(
                   math.Point(localPos.dx, localPos.dy),
                 );
@@ -1147,9 +1161,7 @@ class _RouteColorButton extends StatelessWidget {
                         color: c,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: isActive
-                              ? AppTheme.textPrimary
-                              : Colors.white,
+                          color: isActive ? AppTheme.textPrimary : Colors.white,
                           width: isActive ? 2 : 2,
                         ),
                         boxShadow: [
@@ -1324,64 +1336,67 @@ class _HoverTooltip extends StatelessWidget {
                   left: left,
                   top: top,
                   child: Container(
-              width: width,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.straighten_rounded,
-                        size: 12,
-                        color: AppTheme.primaryColor,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        GeoUtils.formatDistance(distance),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                    width: width,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.terrain_rounded,
-                        size: 12,
-                        color: AppTheme.textSecondary,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        elevation != null
-                            ? '${elevation!.round()} m'
-                            : 'No elevation',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary,
-                          fontWeight: FontWeight.w500,
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.straighten_rounded,
+                              size: 12,
+                              color: AppTheme.primaryColor,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              GeoUtils.formatDistance(distance),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.terrain_rounded,
+                              size: 12,
+                              color: AppTheme.textSecondary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              elevation != null
+                                  ? '${elevation!.round()} m'
+                                  : 'No elevation',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.textSecondary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            ),
                 ),
               ],
             );

@@ -146,7 +146,10 @@ class _SidebarContentState extends State<_SidebarContent>
             unselectedLabelColor: AppTheme.textSecondary,
             indicatorColor: AppTheme.primaryColor,
             indicatorSize: TabBarIndicatorSize.tab,
-            labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            labelStyle: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
             tabs: const [
               Tab(text: 'Tracks'),
               Tab(text: 'Points'),
@@ -216,12 +219,15 @@ class _RouteStats extends StatelessWidget {
             // an O(N) haversine scan over the polyline).
             final nearest = provider.nearestOnTrackForWaypoint(wpt);
             if (nearest == null) continue;
-            ticks.add(WaypointTick(
-              distance: nearest.distance,
-              color: WaypointIcons.colorFor(wpt.type),
-              icon: WaypointIcons.iconFor(wpt.type),
-              offTrack: nearest.distanceToLineMeters > GpxProvider.snapTolerance,
-            ));
+            ticks.add(
+              WaypointTick(
+                distance: nearest.distance,
+                color: WaypointIcons.colorFor(wpt.type),
+                icon: WaypointIcons.iconFor(wpt.type),
+                offTrack:
+                    nearest.distanceToLineMeters > GpxProvider.snapTolerance,
+              ),
+            );
           }
         }
 
@@ -229,7 +235,8 @@ class _RouteStats extends StatelessWidget {
         // to the source filename without extension, which is what the
         // user knows the file as. Only show "Untitled Route" as a last
         // resort (e.g. a brand-new empty route).
-        final displayName = _firstNonBlank(data.name) ??
+        final displayName =
+            _firstNonBlank(data.name) ??
             _filenameAsTitle(provider.fileName) ??
             'Untitled Route';
 
@@ -372,7 +379,10 @@ class _RouteStats extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Route Name', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+        title: const Text(
+          'Route Name',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -470,7 +480,10 @@ class TracksList extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     'No tracks loaded',
-                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 13,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -558,9 +571,7 @@ class _TrackTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: AppTheme.borderColor.withValues(alpha: 0.5),
-        ),
+        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.5)),
       ),
       child: Opacity(
         opacity: dim,
@@ -595,8 +606,10 @@ class _TrackTile extends StatelessWidget {
                   onPressed: () => provider.toggleTrackVisibility(track.id),
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
                   tooltip: visible ? 'Hide track' : 'Show track',
                 ),
                 IconButton(
@@ -604,18 +617,23 @@ class _TrackTile extends StatelessWidget {
                   onPressed: () => _renameTrack(context, provider, displayName),
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
                   tooltip: 'Rename track',
                 ),
                 if (canDelete)
                   IconButton(
                     icon: const Icon(Icons.close_rounded, size: 14),
-                    onPressed: () => _confirmRemove(context, provider, displayName),
+                    onPressed: () =>
+                        _confirmRemove(context, provider, displayName),
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 28, minHeight: 28),
+                    constraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
                     tooltip: 'Remove track',
                   ),
               ],
@@ -659,7 +677,11 @@ class _TrackTile extends StatelessWidget {
                 ),
                 if (track.segments.length > 1) ...[
                   const SizedBox(width: 10),
-                  Icon(Icons.timeline_rounded, size: 11, color: AppTheme.textSecondary),
+                  Icon(
+                    Icons.timeline_rounded,
+                    size: 11,
+                    color: AppTheme.textSecondary,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     '${track.segments.length} segments',
@@ -775,8 +797,10 @@ class _TrackTile extends StatelessWidget {
           'Remove track?',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         ),
-        content: Text('Remove "$displayName" from this view? This does '
-            'not affect the original GPX file on disk.'),
+        content: Text(
+          'Remove "$displayName" from this view? This does '
+          'not affect the original GPX file on disk.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -818,9 +842,7 @@ class _ColorSwatchButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: Colors.black.withValues(alpha: 0.15),
-            ),
+            border: Border.all(color: Colors.black.withValues(alpha: 0.15)),
           ),
         ),
       ),
@@ -848,12 +870,18 @@ class _TrackPointsList extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.add_location_alt_rounded, size: 32,
-                      color: AppTheme.textSecondary.withValues(alpha: 0.4)),
+                  Icon(
+                    Icons.add_location_alt_rounded,
+                    size: 32,
+                    color: AppTheme.textSecondary.withValues(alpha: 0.4),
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     'No track points yet',
-                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 13,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -942,7 +970,9 @@ class _TrackPointTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.primaryColor.withValues(alpha: 0.05) : null,
+          color: isSelected
+              ? AppTheme.primaryColor.withValues(alpha: 0.05)
+              : null,
           border: Border(
             left: BorderSide(
               color: isSelected ? AppTheme.primaryColor : Colors.transparent,
@@ -952,7 +982,11 @@ class _TrackPointTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.drag_indicator_rounded, size: 16, color: Color(0xFFD1D5DB)),
+            const Icon(
+              Icons.drag_indicator_rounded,
+              size: 16,
+              color: Color(0xFFD1D5DB),
+            ),
             const SizedBox(width: 4),
             Container(
               width: 24,
@@ -969,7 +1003,9 @@ class _TrackPointTile extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: isSelected ? AppTheme.primaryColor : AppTheme.textSecondary,
+                  color: isSelected
+                      ? AppTheme.primaryColor
+                      : AppTheme.textSecondary,
                 ),
               ),
             ),
@@ -980,7 +1016,10 @@ class _TrackPointTile extends StatelessWidget {
                 children: [
                   Text(
                     '${point.latLng.latitude.toStringAsFixed(5)}, ${point.latLng.longitude.toStringAsFixed(5)}',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                   Row(
                     children: [
@@ -993,7 +1032,13 @@ class _TrackPointTile extends StatelessWidget {
                           ),
                         ),
                       if (point.elevation != null && distFromPrev != null)
-                        Text(' · ', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                        Text(
+                          ' · ',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 11,
+                          ),
+                        ),
                       if (distFromPrev != null)
                         Text(
                           GeoUtils.formatDistance(distFromPrev!),
@@ -1040,12 +1085,18 @@ class WaypointsList extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.flag_rounded, size: 32,
-                      color: AppTheme.textSecondary.withValues(alpha: 0.4)),
+                  Icon(
+                    Icons.flag_rounded,
+                    size: 32,
+                    color: AppTheme.textSecondary.withValues(alpha: 0.4),
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     'No waypoints yet',
-                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 13,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -1059,10 +1110,8 @@ class WaypointsList extends StatelessWidget {
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     onPressed: hasTrack
-                        ? () => showAddWaypointByDistanceDialog(
-                              context,
-                              provider,
-                            )
+                        ? () =>
+                              showAddWaypointByDistanceDialog(context, provider)
                         : null,
                     icon: const Icon(Icons.straighten_rounded, size: 16),
                     label: const Text('Add by km'),
@@ -1102,7 +1151,8 @@ class WaypointsList extends StatelessWidget {
             final nearest = profile.isEmpty
                 ? null
                 : provider.nearestOnTrackForWaypoint(wpt);
-            final onTrack = nearest != null &&
+            final onTrack =
+                nearest != null &&
                 nearest.distanceToLineMeters <= GpxProvider.snapTolerance;
             return _WaypointTile(
               key: ValueKey(wpt.id),
@@ -1125,18 +1175,36 @@ class WaypointsList extends StatelessWidget {
     );
   }
 
-  void _editWaypoint(BuildContext context, GpxProvider provider, GpxWaypoint wpt) {
+  void _editWaypoint(
+    BuildContext context,
+    GpxProvider provider,
+    GpxWaypoint wpt,
+  ) {
     final nameController = TextEditingController(text: wpt.name);
     final descController = TextEditingController(text: wpt.description);
     final cutoffController = TextEditingController(text: wpt.cutoff);
     WaypointType selectedType = wpt.type;
 
+    final profile = provider.elevationProfile();
+    final hasTrack = !profile.isEmpty;
+    final totalKm = hasTrack ? profile.totalDistance / 1000 : 0.0;
+    final trackInfo = hasTrack ? provider.waypointTrackInfo(wpt) : null;
+    final currentKm = trackInfo != null ? trackInfo.distance / 1000 : null;
+    final kmController = TextEditingController(
+      text: currentKm != null ? currentKm.toStringAsFixed(2) : '',
+    );
+
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Edit Waypoint', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            'Edit Waypoint',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
           content: SizedBox(
             width: 360,
             child: Column(
@@ -1162,6 +1230,21 @@ class WaypointsList extends StatelessWidget {
                     helperText: 'Race cutoff time at this waypoint',
                   ),
                 ),
+                if (hasTrack) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: kmController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'Distance (km)',
+                      hintText: 'e.g. 12.5',
+                      helperText:
+                          'Track length: ${totalKm.toStringAsFixed(2)} km — change to slide along route',
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Text('Type', style: Theme.of(ctx).textTheme.labelMedium),
                 const SizedBox(height: 8),
@@ -1206,11 +1289,23 @@ class WaypointsList extends StatelessWidget {
                 provider.updateWaypoint(
                   wpt.id,
                   name: nameController.text,
-                  description: descController.text.isEmpty ? null : descController.text,
+                  description: descController.text.isEmpty
+                      ? null
+                      : descController.text,
                   type: selectedType,
                   cutoff: cutoffText.isEmpty ? null : cutoffText,
                   clearCutoff: cutoffText.isEmpty,
                 );
+                if (hasTrack) {
+                  final newKm = double.tryParse(
+                    kmController.text.replaceAll(',', '.'),
+                  );
+                  if (newKm != null &&
+                      (currentKm == null ||
+                          (newKm - currentKm).abs() > 0.001)) {
+                    provider.moveWaypointToDistance(wpt.id, newKm * 1000);
+                  }
+                }
                 Navigator.pop(ctx);
               },
               child: const Text('Save'),
@@ -1271,43 +1366,67 @@ class _WaypointTile extends StatelessWidget {
     ];
     if (cumulativeDistance != null) {
       detailWidgets
-        ..add(Text(' · ', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)))
-        ..add(Text(
-          '@ ${GeoUtils.formatDistance(cumulativeDistance!)}',
-          style: TextStyle(
-            fontSize: 11,
-            color: AppTheme.textSecondary,
-            fontWeight: FontWeight.w500,
+        ..add(
+          Text(
+            ' · ',
+            style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
           ),
-        ));
+        )
+        ..add(
+          Text(
+            '@ ${GeoUtils.formatDistance(cumulativeDistance!)}',
+            style: TextStyle(
+              fontSize: 11,
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        );
     }
     if (offTrackMeters != null) {
       detailWidgets
         ..add(const SizedBox(width: 4))
-        ..add(Icon(Icons.warning_amber_rounded, size: 12, color: const Color(0xFFF59E0B)))
-        ..add(const SizedBox(width: 2))
-        ..add(Text(
-          '${offTrackMeters!.round()}m off',
-          style: const TextStyle(
-            fontSize: 11,
-            color: Color(0xFFB45309),
-            fontWeight: FontWeight.w500,
+        ..add(
+          Icon(
+            Icons.warning_amber_rounded,
+            size: 12,
+            color: const Color(0xFFF59E0B),
           ),
-        ));
+        )
+        ..add(const SizedBox(width: 2))
+        ..add(
+          Text(
+            '${offTrackMeters!.round()}m off',
+            style: const TextStyle(
+              fontSize: 11,
+              color: Color(0xFFB45309),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        );
     }
     if (waypoint.cutoff != null && waypoint.cutoff!.isNotEmpty) {
       detailWidgets
-        ..add(Text(' · ', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)))
-        ..add(Icon(Icons.timer_outlined, size: 11, color: const Color(0xFFEF4444)))
-        ..add(const SizedBox(width: 2))
-        ..add(Text(
-          waypoint.cutoff!,
-          style: const TextStyle(
-            fontSize: 11,
-            color: Color(0xFFEF4444),
-            fontWeight: FontWeight.w600,
+        ..add(
+          Text(
+            ' · ',
+            style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
           ),
-        ));
+        )
+        ..add(
+          Icon(Icons.timer_outlined, size: 11, color: const Color(0xFFEF4444)),
+        )
+        ..add(const SizedBox(width: 2))
+        ..add(
+          Text(
+            waypoint.cutoff!,
+            style: const TextStyle(
+              fontSize: 11,
+              color: Color(0xFFEF4444),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        );
     }
 
     return InkWell(
@@ -1325,7 +1444,11 @@ class _WaypointTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.drag_indicator_rounded, size: 16, color: Color(0xFFD1D5DB)),
+            const Icon(
+              Icons.drag_indicator_rounded,
+              size: 16,
+              color: Color(0xFFD1D5DB),
+            ),
             const SizedBox(width: 4),
             Container(
               width: 28,
@@ -1343,7 +1466,10 @@ class _WaypointTile extends StatelessWidget {
                 children: [
                   Text(
                     waypoint.name ?? 'Unnamed',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1445,8 +1571,11 @@ class _ClimbsEmpty extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 32,
-                color: AppTheme.textSecondary.withValues(alpha: 0.4)),
+            Icon(
+              icon,
+              size: 32,
+              color: AppTheme.textSecondary.withValues(alpha: 0.4),
+            ),
             const SizedBox(height: 8),
             Text(
               title,
@@ -1490,137 +1619,149 @@ class _ClimbTile extends StatelessWidget {
     final provider = context.read<GpxProvider>();
 
     return MouseRegion(
-      onEnter: (_) => provider.hoveredClimbRange.value =
-          (climb.startDistance, climb.endDistance),
+      onEnter: (_) => provider.hoveredClimbRange.value = (
+        climb.startDistance,
+        climb.endDistance,
+      ),
       onExit: (_) => provider.hoveredClimbRange.value = null,
       child: Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: AppTheme.borderColor.withValues(alpha: 0.5),
+        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceColor,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: AppTheme.borderColor.withValues(alpha: 0.5),
+          ),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 28,
-                height: 28,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: gradeColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                child: Text(
-                  '${index + 1}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: gradeColor,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: gradeColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  child: Text(
+                    '${index + 1}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: gradeColor,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Climb ${index + 1}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Climb ${index + 1}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      '${GeoUtils.formatDistance(climb.startDistance)} → '
-                      '${GeoUtils.formatDistance(climb.endDistance)}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppTheme.textSecondary,
-                        fontWeight: FontWeight.w500,
+                      const SizedBox(height: 1),
+                      Text(
+                        '${GeoUtils.formatDistance(climb.startDistance)} → '
+                        '${GeoUtils.formatDistance(climb.endDistance)}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: categoryColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  category.label,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: categoryColor,
-                    letterSpacing: 0.3,
+                    ],
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              _ClimbStat(
-                icon: Icons.straighten_rounded,
-                label: GeoUtils.formatDistance(climb.length),
-                tooltip: 'Length',
-              ),
-              const SizedBox(width: 6),
-              _ClimbStat(
-                icon: Icons.trending_up_rounded,
-                label: '+${climb.gain.round()} m',
-                tooltip: 'Elevation gain',
-                color: const Color(0xFF22C55E),
-              ),
-              const SizedBox(width: 6),
-              _ClimbStat(
-                icon: Icons.show_chart_rounded,
-                label: '${avgPct.toStringAsFixed(1)}%',
-                tooltip: 'Average grade',
-                color: gradeColor,
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Icon(Icons.bolt_rounded, size: 12, color: AppTheme.textSecondary),
-              const SizedBox(width: 3),
-              Text(
-                'Max ${maxPct.toStringAsFixed(1)}%',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: _gradeColor(maxPct, activity),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: categoryColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    category.label,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: categoryColor,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Icon(Icons.height_rounded, size: 12, color: AppTheme.textSecondary),
-              const SizedBox(width: 3),
-              Text(
-                '${climb.startElevation.round()} → ${climb.endElevation.round()} m',
-                style: TextStyle(
-                  fontSize: 11,
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _ClimbStat(
+                  icon: Icons.straighten_rounded,
+                  label: GeoUtils.formatDistance(climb.length),
+                  tooltip: 'Length',
+                ),
+                const SizedBox(width: 6),
+                _ClimbStat(
+                  icon: Icons.trending_up_rounded,
+                  label: '+${climb.gain.round()} m',
+                  tooltip: 'Elevation gain',
+                  color: const Color(0xFF22C55E),
+                ),
+                const SizedBox(width: 6),
+                _ClimbStat(
+                  icon: Icons.show_chart_rounded,
+                  label: '${avgPct.toStringAsFixed(1)}%',
+                  tooltip: 'Average grade',
+                  color: gradeColor,
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(
+                  Icons.bolt_rounded,
+                  size: 12,
                   color: AppTheme.textSecondary,
-                  fontWeight: FontWeight.w500,
                 ),
-              ),
-            ],
-          ),
-        ],
-      ),
+                const SizedBox(width: 3),
+                Text(
+                  'Max ${maxPct.toStringAsFixed(1)}%',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: _gradeColor(maxPct, activity),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Icon(
+                  Icons.height_rounded,
+                  size: 12,
+                  color: AppTheme.textSecondary,
+                ),
+                const SizedBox(width: 3),
+                Text(
+                  '${climb.startElevation.round()} → ${climb.endElevation.round()} m',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1792,8 +1933,10 @@ class _DescentTile extends StatelessWidget {
     final provider = context.read<GpxProvider>();
 
     return MouseRegion(
-      onEnter: (_) => provider.hoveredDescentRange.value =
-          (descent.startDistance, descent.endDistance),
+      onEnter: (_) => provider.hoveredDescentRange.value = (
+        descent.startDistance,
+        descent.endDistance,
+      ),
       onExit: (_) => provider.hoveredDescentRange.value = null,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
@@ -1905,7 +2048,11 @@ class _DescentTile extends StatelessWidget {
             const SizedBox(height: 6),
             Row(
               children: [
-                Icon(Icons.bolt_rounded, size: 12, color: AppTheme.textSecondary),
+                Icon(
+                  Icons.bolt_rounded,
+                  size: 12,
+                  color: AppTheme.textSecondary,
+                ),
                 const SizedBox(width: 3),
                 Text(
                   'Max \u2212${maxPct.toStringAsFixed(1)}%',
@@ -1916,7 +2063,11 @@ class _DescentTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                Icon(Icons.height_rounded, size: 12, color: AppTheme.textSecondary),
+                Icon(
+                  Icons.height_rounded,
+                  size: 12,
+                  color: AppTheme.textSecondary,
+                ),
                 const SizedBox(width: 3),
                 Text(
                   '${descent.startElevation.round()} → ${descent.endElevation.round()} m',
@@ -2002,15 +2153,17 @@ class SplitsList extends StatelessWidget {
         for (final wpt in data.waypoints) {
           final nearest = provider.nearestOnTrackForWaypoint(wpt);
           if (nearest == null) continue;
-          rows.add(_SplitRow(
-            name: _firstNonBlank(wpt.name) ?? _defaultName(wpt.type),
-            distance: nearest.distance,
-            color: WaypointIcons.colorFor(wpt.type),
-            icon: WaypointIcons.iconFor(wpt.type),
-            offTrack:
-                nearest.distanceToLineMeters > GpxProvider.snapTolerance,
-            cutoff: wpt.cutoff,
-          ));
+          rows.add(
+            _SplitRow(
+              name: _firstNonBlank(wpt.name) ?? _defaultName(wpt.type),
+              distance: nearest.distance,
+              color: WaypointIcons.colorFor(wpt.type),
+              icon: WaypointIcons.iconFor(wpt.type),
+              offTrack:
+                  nearest.distanceToLineMeters > GpxProvider.snapTolerance,
+              cutoff: wpt.cutoff,
+            ),
+          );
         }
         rows.sort((a, b) => a.distance.compareTo(b.distance));
 
@@ -2020,9 +2173,7 @@ class SplitsList extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: AppTheme.primaryColor,
-                border: Border(
-                  bottom: BorderSide(color: AppTheme.borderColor),
-                ),
+                border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
               ),
               child: Row(
                 children: const [
@@ -2085,8 +2236,10 @@ class SplitsList extends StatelessWidget {
                   return MouseRegion(
                     onEnter: (_) {
                       if (index < rows.length - 1) {
-                        provider.hoveredClimbRange.value =
-                            (row.distance, rows[index + 1].distance);
+                        provider.hoveredClimbRange.value = (
+                          row.distance,
+                          rows[index + 1].distance,
+                        );
                       }
                     },
                     onExit: (_) => provider.hoveredClimbRange.value = null,
@@ -2198,8 +2351,9 @@ class SplitsList extends StatelessWidget {
                                 fontWeight: FontWeight.w500,
                                 color: toNext > 0
                                     ? AppTheme.textSecondary
-                                    : AppTheme.textSecondary
-                                        .withValues(alpha: 0.5),
+                                    : AppTheme.textSecondary.withValues(
+                                        alpha: 0.5,
+                                      ),
                                 fontFeatures: const [
                                   FontFeature.tabularFigures(),
                                 ],

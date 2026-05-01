@@ -36,8 +36,9 @@ class AppTheme {
   /// don't, and their parents are often `const` so Flutter's element
   /// diff skips them. Widgets subscribe via [subscribe] to be marked
   /// dirty on toggle without losing state.
-  static final ValueNotifier<ThemeMode> themeMode =
-      ValueNotifier<ThemeMode>(ThemeMode.dark);
+  static final ValueNotifier<ThemeMode> themeMode = ValueNotifier<ThemeMode>(
+    ThemeMode.dark,
+  );
 
   /// Call once at the top of any `build` that reads the static color
   /// getters. Registers the calling element as a dependent of the
@@ -65,8 +66,7 @@ class AppTheme {
   /// the toolbar's brightness toggle.
   static void toggleMode() {
     themeMode.value = _isDark ? ThemeMode.light : ThemeMode.dark;
-    web.window.localStorage
-        .setItem(_themeStorageKey, themeMode.value.name);
+    web.window.localStorage.setItem(_themeStorageKey, themeMode.value.name);
   }
 
   // Brand colors are mode-independent — the indigo/violet pair reads
@@ -77,11 +77,9 @@ class AppTheme {
   static Color get trackColorAlt => _trackColorAlt;
 
   // Mode-aware getters used directly by ~170 widget call sites.
-  static Color get surfaceColor =>
-      _isDark ? _darkSurface : _lightSurface;
+  static Color get surfaceColor => _isDark ? _darkSurface : _lightSurface;
   static Color get cardColor => _isDark ? _darkCard : _lightCard;
-  static Color get borderColor =>
-      _isDark ? _darkBorder : _lightBorder;
+  static Color get borderColor => _isDark ? _darkBorder : _lightBorder;
   static Color get textPrimary =>
       _isDark ? _darkTextPrimary : _lightTextPrimary;
   static Color get textSecondary =>
@@ -160,9 +158,7 @@ class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: _primaryColor,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         ),
       ),
@@ -170,9 +166,7 @@ class AppTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: textPrimary,
           side: BorderSide(color: border),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         ),
       ),
@@ -194,24 +188,29 @@ class AppTheme {
           borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: _primaryColor, width: 2),
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
         isDense: true,
       ),
-      dividerTheme: DividerThemeData(
-        color: border,
-        thickness: 1,
-        space: 1,
-      ),
+      dividerTheme: DividerThemeData(color: border, thickness: 1, space: 1),
       chipTheme: ChipThemeData(
         backgroundColor: surface,
         selectedColor: _primaryColor.withValues(alpha: 0.1),
-        labelStyle:
-            const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-        side: BorderSide(color: border),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
+        labelStyle: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: textPrimary,
         ),
+        secondaryLabelStyle: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: textPrimary,
+        ),
+        checkmarkColor: textPrimary,
+        side: BorderSide(color: border),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       ),
       tooltipTheme: TooltipThemeData(
@@ -232,5 +231,5 @@ class AppTheme {
 /// element diff and keep stale colors visible after a toggle).
 class AppThemeScope extends InheritedNotifier<ValueNotifier<ThemeMode>> {
   AppThemeScope({super.key, required super.child})
-      : super(notifier: AppTheme.themeMode);
+    : super(notifier: AppTheme.themeMode);
 }
