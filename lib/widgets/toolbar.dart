@@ -320,7 +320,14 @@ class GpxDrawer extends StatelessWidget {
                           ),
                           _DrawerItem(
                             icon: Icons.watch_rounded,
-                            label: 'Export TCX (Garmin)',
+                            label: 'Export FIT (Garmin course)',
+                            enabled: hasData,
+                            onTap: () =>
+                                run((ctx) => _exportFitFile(ctx, provider)),
+                          ),
+                          _DrawerItem(
+                            icon: Icons.download_for_offline_rounded,
+                            label: 'Export TCX (legacy)',
                             enabled: hasData,
                             onTap: () =>
                                 run((ctx) => _exportTcxFile(ctx, provider)),
@@ -864,6 +871,51 @@ void _exportFile(BuildContext context, GpxProvider provider) {
       ),
     );
   }
+}
+
+void _exportFitFile(BuildContext context, GpxProvider provider) {
+  try {
+    final bytes = provider.exportFitToBytes();
+    final blob = web.Blob(
+      [bytes.toJS].toJS,
+      web.BlobPropertyBag(type: 'application/vnd.ant.fit'),
+    );
+    final url = web.URL.createObjectURL(blob);
+    final fileName = _fitFileName(provider.fileName);
+
+    final anchor = web.HTMLAnchorElement()
+      ..href = url
+      ..download = fileName;
+    anchor.click();
+
+    web.URL.revokeObjectURL(url);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'FIT course exported — upload to Garmin Connect → Training → Courses → Import',
+        ),
+        backgroundColor: Color(0xFF22C55E),
+        duration: Duration(seconds: 4),
+      ),
+    );
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Failed to export FIT: $e'),
+        backgroundColor: const Color(0xFFEF4444),
+      ),
+    );
+  }
+}
+
+String _fitFileName(String? source) {
+  final raw = (source ?? '').trim();
+  if (raw.isEmpty) return 'course.fit';
+  final dot = raw.lastIndexOf('.');
+  final stem = dot > 0 ? raw.substring(0, dot) : raw;
+  final clean = stem.trim().isEmpty ? 'course' : stem.trim();
+  return '$clean.fit';
 }
 
 void _exportTcxFile(BuildContext context, GpxProvider provider) {

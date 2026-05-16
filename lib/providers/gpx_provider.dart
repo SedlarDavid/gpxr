@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:web/web.dart' as web;
 import '../models/gpx_models.dart';
 import '../services/gpx_parser.dart';
+import '../services/fit_course_exporter.dart';
 import '../services/tcx_exporter.dart';
 import '../utils/climb_detector.dart';
 import '../utils/descent_detector.dart';
@@ -45,6 +46,7 @@ class GpxProvider extends ChangeNotifier {
 
   final GpxParser _parser = GpxParser();
   final TcxExporter _tcxExporter = TcxExporter();
+  final FitCourseExporter _fitExporter = FitCourseExporter();
 
   GpxData? _data;
   GpxData? get data => _data;
@@ -382,6 +384,16 @@ class GpxProvider extends ChangeNotifier {
   String exportTcxToString() {
     if (_data == null) throw Exception('No data to export');
     return _tcxExporter.export(data: _data!, tracks: visibleTracks);
+  }
+
+  /// Exports the current course as a Garmin FIT (binary) course file.
+  /// FIT is Garmin Connect's native course format — unlike TCX, the
+  /// Courses → Import path on Connect preserves every `course_point`
+  /// message, so aid stations land at the right km on both forward
+  /// and return passes of out-and-back routes.
+  Uint8List exportFitToBytes() {
+    if (_data == null) throw Exception('No data to export');
+    return _fitExporter.export(data: _data!, tracks: visibleTracks);
   }
 
   void createNew() {

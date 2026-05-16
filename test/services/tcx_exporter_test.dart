@@ -93,6 +93,84 @@ void main() {
         doc.findAllElements('DistanceMeters').first.innerText,
       );
       expect(distance, closeTo(200, 10));
+
+      // Each CoursePoint Time must exactly equal one of the Trackpoint
+      // Times — Garmin Connect drops CoursePoints whose Time isn't an
+      // exact match. We snap to nearest Trackpoint specifically to
+      // guarantee this.
+      final trackTimes = doc
+          .findAllElements('Trackpoint')
+          .map((tp) => tp.getElement('Time')!.innerText)
+          .toSet();
+      for (final t in times) {
+        expect(
+          trackTimes,
+          contains(t),
+          reason: 'CoursePoint Time $t must match a Trackpoint Time',
+        );
+      }
+    });
+
+    test('CoursePoint names obey schema (<=10 chars, ASCII, unique)', () {
+      // Schema: CoursePointName_t is Token_t with maxLength=10.
+      // Garmin Connect strictly enforces — long names, duplicates,
+      // and (in practice) non-ASCII characters get the CoursePoint
+      // silently dropped on import. Real-world race brief uses
+      // diacritics and repeats names on each pass of an out-and-back.
+      const start = LatLng(49.0, 18.0);
+      const east = LatLng(49.0, 18.0014);
+      final track = GpxTrack(
+        segments: [
+          GpxTrackSegment(
+            points: [
+              GpxTrackPoint(latLng: start),
+              GpxTrackPoint(latLng: east),
+              GpxTrackPoint(latLng: start),
+            ],
+          ),
+        ],
+      );
+      final data = GpxData(
+        tracks: [track],
+        waypoints: [
+          GpxWaypoint(
+            latLng: start,
+            name: 'Sedlo pod Vysokou',
+            type: WaypointType.aidStation,
+            trackDistance: 50,
+          ),
+          GpxWaypoint(
+            latLng: east,
+            name: 'Chata Třeštík',
+            type: WaypointType.aidStation,
+            trackDistance: 100,
+          ),
+          GpxWaypoint(
+            latLng: start,
+            name: 'Sedlo pod Vysokou 2.',
+            type: WaypointType.aidStation,
+            trackDistance: 150,
+          ),
+        ],
+      );
+
+      final xml = TcxExporter().export(data: data, tracks: [track]);
+      final doc = XmlDocument.parse(xml);
+      final names = doc
+          .findAllElements('CoursePoint')
+          .map((cp) => cp.getElement('Name')!.innerText)
+          .toList();
+
+      expect(names, hasLength(3));
+      expect(names.toSet(), hasLength(3), reason: 'names must be unique');
+      for (final n in names) {
+        expect(n.length, lessThanOrEqualTo(10));
+        expect(
+          RegExp(r'^[\x20-\x7E]+$').hasMatch(n),
+          isTrue,
+          reason: '"$n" must be pure ASCII for Garmin compatibility',
+        );
+      }
     });
 
     test('falls back to projection when trackDistance is missing', () {

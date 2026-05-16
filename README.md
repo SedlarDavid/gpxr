@@ -16,11 +16,15 @@ files never leave your browser. Works on desktop and mobile.
 
 ### Route editing
 - Import and export GPX files
-- **Export TCX (Garmin)**: alongside `.gpx`, export a Garmin Training
-  Center `<Course>` file with each waypoint emitted as an ordered
-  `<CoursePoint>`. Garmin Connect places course points by time rather
-  than projecting lat/lon, so on out-and-back / lollipop routes every
-  aid station lands at the correct km on the watch
+- **Export FIT (Garmin race day)**: download a Garmin Training Center
+  FIT course file with every waypoint preserved as a `course_point`
+  message. Upload via Garmin Connect → Training → Courses → Import
+  and send to your watch; aid-station alerts fire at the correct km
+  on every pass of an out-and-back / lollipop route, since the watch
+  matches on timestamp/distance rather than projecting lat/lon
+- Export TCX (legacy) — kept for tools that can't read FIT, but
+  Garmin Connect strips its `<CoursePoint>` elements on import; use
+  FIT when targeting a Garmin device
 - Add, move, delete and reorder track points directly on the map
 - Reverse route direction in one click
 - Smart insert: click near the track and the new point is placed on

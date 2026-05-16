@@ -4,6 +4,32 @@ All notable changes to GPXR are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] — 2026-05-16
+
+### Added
+- **Export FIT (Garmin course)**: drawer menu → Export FIT writes a
+  binary Garmin Training Center FIT course file. Unlike TCX (which
+  Garmin Connect strips of imported `<CoursePoint>` blocks on the
+  Courses → Import path), FIT round-trips every `course_point`
+  message intact, so all aid stations land on the watch with their
+  correct names, types, and km marks. Built as a pure-Dart encoder
+  (no `fit_tool` dependency) so it compiles to web. Watch alerts
+  fire by timestamp/distance, which is independent of Garmin
+  Connect's lat/lon projection — meaning out-and-back / lollipop
+  routes get correct alerts at every pass through a repeated
+  location.
+
+### Changed
+- TCX exporter now adheres strictly to the Garmin TCX v2 schema —
+  `CoursePointName_t` capped at 10 chars with ASCII fold + de-dup
+  counter, `<Time>` and `<Position>` snapped to an exact
+  `<Trackpoint>` (Garmin Connect drops course points whose Time
+  doesn't match a real Trackpoint), and `Course/Name` truncated to
+  15 chars with ASCII fold. The plain `.gpx` export is unchanged.
+- Internal: new `ElevationProfile.nearestIndexForDistance` helper
+  exposes the bsearch-driven snap-to-nearest-point operation that
+  both the TCX and FIT exporters now use.
+
 ## [1.6.1] — 2026-05-16
 
 ### Fixed
@@ -141,6 +167,8 @@ Initial public release.
 - Activity profile (Trail run / Bike) drives climb / descent
   thresholds and grade-colour ramps.
 
+[1.6.2]: https://github.com/SedlarDavid/gpxr/compare/v1.6.1...v1.6.2
+[1.7.0]: https://github.com/SedlarDavid/gpxr/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/SedlarDavid/gpxr/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/SedlarDavid/gpxr/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/SedlarDavid/gpxr/compare/v1.5.0...v1.5.1

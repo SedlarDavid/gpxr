@@ -117,6 +117,22 @@ class ElevationProfile {
     );
   }
 
+  /// Returns the index of the track point closest to cumulative
+  /// distance [d]. Unlike [sampleAtDistance], which interpolates a
+  /// fresh lat/lon between two adjacent points, this snaps to a real
+  /// point that already exists in the polyline — useful for emitters
+  /// (TCX course export) that need a Position/Time that exactly
+  /// matches one of the existing Trackpoints, because Garmin's strict
+  /// importer drops CoursePoints whose Time doesn't line up with a
+  /// real Trackpoint.
+  int nearestIndexForDistance(double d) {
+    if (distances.isEmpty) return 0;
+    final upper = _indexForDistance(d);
+    if (upper == 0) return 0;
+    final lower = upper - 1;
+    return (d - distances[lower]) < (distances[upper] - d) ? lower : upper;
+  }
+
   /// Returns the upper-bound index i such that distances[i] >= d.
   int _indexForDistance(double d) {
     if (distances.isEmpty) return 0;

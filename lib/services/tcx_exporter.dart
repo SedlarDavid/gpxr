@@ -81,9 +81,14 @@ class TcxExporter {
           tracks.isNotEmpty ? tracks.first.name : null,
         ]) ??
         'Course';
-    // The Garmin v2 XSD types `Course/Name` as Token_1_15 — Connect
-    // accepts longer in practice but watches truncate hard, so cap at 15.
-    final courseName = _truncate(rawName, 15);
+    // The Garmin v2 XSD types `Course/Name` as RestrictedToken_t with
+    // maxLength=15. Garmin Connect strictly enforces the limit and
+    // some firmwares choke on Unicode in this position — ASCII-fold
+    // and hard-cap so the course actually imports.
+    final courseName = _truncate(
+      _foldDiacritics(rawName).replaceAll(RegExp(r'\s+'), ' ').trim(),
+      15,
+    );
 
     final totalSeconds = (profile.totalDistance * secondsPerMeter).ceil().clamp(
       1,
@@ -200,33 +205,49 @@ class TcxExporter {
     // before emitting.
     pairs.sort((a, b) => a.distance.compareTo(b.distance));
 
+    final usedNames = <String>{};
     for (final entry in pairs) {
       final wpt = entry.waypoint;
-      final sample = profile.sampleAtDistance(entry.distance);
+      // Snap to the closest *real* Trackpoint instead of using an
+      // interpolated sample. Garmin Connect's TCX importer matches
+      // CoursePoints to Trackpoints by Time, and silently drops any
+      // CoursePoint whose Time doesn't line up with an existing
+      // Trackpoint — so we reuse the snapped Trackpoint's exact
+      // distance for Time generation and its lat/lon for Position so
+      // the two can't drift apart.
+      final idx = profile.nearestIndexForDistance(entry.distance);
+      final trackPoint = profile.points[idx];
+      final snappedDistance = profile.distances[idx];
+      final name = _coursePointName(
+        _firstNonBlank([wpt.name]) ?? 'Waypoint',
+        usedNames,
+      );
       builder.element(
         'CoursePoint',
         nest: () {
-          // CoursePoint/Name is Token_1_10 in the v2 schema. Truncate
-          // rather than reject so partial names still survive the trip.
-          builder.element(
-            'Name',
-            nest: _truncate(_firstNonBlank([wpt.name]) ?? 'Waypoint', 10),
-          );
-          builder.element('Time', nest: _isoTime(entry.distance));
+          // CoursePointName_t in the v2 schema caps at 10 chars
+          // (whitespace-collapsed xsd:token). Garmin Connect strictly
+          // enforces this on import, silently dropping CoursePoints
+          // whose Name is longer or duplicates another Name in the
+          // same Course — both passes through "Sedlo pod Vysokou"
+          // truncate to the same 10-char prefix, so we ASCII-fold and
+          // de-duplicate with a trailing counter to keep all of them.
+          builder.element('Name', nest: name);
+          builder.element('Time', nest: _isoTime(snappedDistance));
           builder.element(
             'Position',
             nest: () {
               builder.element(
                 'LatitudeDegrees',
-                nest: sample.latLng.latitude.toString(),
+                nest: trackPoint.latLng.latitude.toString(),
               );
               builder.element(
                 'LongitudeDegrees',
-                nest: sample.latLng.longitude.toString(),
+                nest: trackPoint.latLng.longitude.toString(),
               );
             },
           );
-          final ele = wpt.elevation ?? sample.elevation;
+          final ele = wpt.elevation ?? trackPoint.elevation;
           if (ele != null) {
             builder.element('AltitudeMeters', nest: ele.toString());
           }
@@ -290,6 +311,132 @@ class TcxExporter {
 
   static String _truncate(String s, int max) =>
       s.length <= max ? s : s.substring(0, max);
+
+  /// Produces a `CoursePointName_t`-compatible name (max 10 chars,
+  /// whitespace-collapsed) that is unique within the current export.
+  /// Strips diacritics so the byte-strict Token_t form survives
+  /// Connect's import — `Š`, `ě`, `ř` etc otherwise occasionally trip
+  /// older firmware code paths. Duplicates get a trailing ` 2`, ` 3`
+  /// counter, inserted *inside* the 10-char budget by truncating the
+  /// base further when needed.
+  static String _coursePointName(String raw, Set<String> used) {
+    final base = _truncate(
+      _foldDiacritics(raw).replaceAll(RegExp(r'\s+'), ' ').trim(),
+      10,
+    );
+    final fallback = base.isEmpty ? 'WP' : base;
+    if (used.add(fallback)) return fallback;
+    var counter = 2;
+    while (true) {
+      final suffix = ' $counter';
+      final budget = 10 - suffix.length;
+      final trimmed = fallback.length > budget
+          ? fallback.substring(0, budget).trimRight()
+          : fallback;
+      final candidate = '$trimmed$suffix';
+      if (used.add(candidate)) return candidate;
+      counter++;
+    }
+  }
+
+  /// Maps common Czech / Western European diacritics to their plain
+  /// ASCII base letter. Not a full Unicode normalizer — just the set
+  /// the user community actually puts in race-brief waypoint names.
+  static String _foldDiacritics(String input) {
+    const folds = {
+      'á': 'a',
+      'à': 'a',
+      'â': 'a',
+      'ä': 'a',
+      'ã': 'a',
+      'å': 'a',
+      'č': 'c',
+      'ç': 'c',
+      'ď': 'd',
+      'é': 'e',
+      'è': 'e',
+      'ê': 'e',
+      'ë': 'e',
+      'ě': 'e',
+      'í': 'i',
+      'ì': 'i',
+      'î': 'i',
+      'ï': 'i',
+      'ľ': 'l',
+      'ĺ': 'l',
+      'ň': 'n',
+      'ñ': 'n',
+      'ó': 'o',
+      'ò': 'o',
+      'ô': 'o',
+      'ö': 'o',
+      'õ': 'o',
+      'ø': 'o',
+      'ř': 'r',
+      'ŕ': 'r',
+      'š': 's',
+      'ş': 's',
+      'ß': 'ss',
+      'ť': 't',
+      'ú': 'u',
+      'ù': 'u',
+      'û': 'u',
+      'ü': 'u',
+      'ů': 'u',
+      'ý': 'y',
+      'ÿ': 'y',
+      'ž': 'z',
+      'ź': 'z',
+      'ż': 'z',
+      'Á': 'A',
+      'À': 'A',
+      'Â': 'A',
+      'Ä': 'A',
+      'Ã': 'A',
+      'Å': 'A',
+      'Č': 'C',
+      'Ç': 'C',
+      'Ď': 'D',
+      'É': 'E',
+      'È': 'E',
+      'Ê': 'E',
+      'Ë': 'E',
+      'Ě': 'E',
+      'Í': 'I',
+      'Ì': 'I',
+      'Î': 'I',
+      'Ï': 'I',
+      'Ľ': 'L',
+      'Ĺ': 'L',
+      'Ň': 'N',
+      'Ñ': 'N',
+      'Ó': 'O',
+      'Ò': 'O',
+      'Ô': 'O',
+      'Ö': 'O',
+      'Õ': 'O',
+      'Ø': 'O',
+      'Ř': 'R',
+      'Ŕ': 'R',
+      'Š': 'S',
+      'Ş': 'S',
+      'Ť': 'T',
+      'Ú': 'U',
+      'Ù': 'U',
+      'Û': 'U',
+      'Ü': 'U',
+      'Ů': 'U',
+      'Ý': 'Y',
+      'Ž': 'Z',
+      'Ź': 'Z',
+      'Ż': 'Z',
+    };
+    final buf = StringBuffer();
+    for (final ch in input.split('')) {
+      buf.write(folds[ch] ?? ch);
+    }
+    return buf.toString();
+  }
 }
 
 class _CoursePointEntry {
