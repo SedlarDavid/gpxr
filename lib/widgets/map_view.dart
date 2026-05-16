@@ -13,6 +13,7 @@ import '../utils/elevation_profile.dart';
 import '../utils/geo_utils.dart';
 import '../utils/theme.dart';
 import '../utils/waypoint_icons.dart';
+import 'add_waypoint_by_distance_dialog.dart';
 
 class MapView extends StatefulWidget {
   const MapView({super.key});
@@ -632,8 +633,9 @@ class _MapViewState extends State<MapView> {
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AppTheme.cardColor,
                         borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: AppTheme.borderColor),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.1),
@@ -653,18 +655,58 @@ class _MapViewState extends State<MapView> {
                           const SizedBox(width: 8),
                           Text(
                             _labelForMode(provider.editMode),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
+                              color: AppTheme.textPrimary,
                             ),
                           ),
+                          if (provider.editMode == EditMode.addWaypoint) ...[
+                            const SizedBox(width: 10),
+                            InkWell(
+                              onTap: () => showAddWaypointByDistanceDialog(
+                                context,
+                                provider,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.straighten_rounded,
+                                      size: 14,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'by km',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppTheme.primaryColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                           const SizedBox(width: 8),
                           InkWell(
                             onTap: () => provider.setEditMode(EditMode.view),
                             borderRadius: BorderRadius.circular(12),
-                            child: const Padding(
-                              padding: EdgeInsets.all(2),
-                              child: Icon(Icons.close, size: 16),
+                            child: Padding(
+                              padding: const EdgeInsets.all(2),
+                              child: Icon(
+                                Icons.close,
+                                size: 16,
+                                color: AppTheme.textPrimary,
+                              ),
                             ),
                           ),
                         ],
@@ -1342,8 +1384,9 @@ class _HoverTooltip extends StatelessWidget {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AppTheme.cardColor,
                       borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.borderColor),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.15),
@@ -1366,9 +1409,10 @@ class _HoverTooltip extends StatelessWidget {
                             const SizedBox(width: 4),
                             Text(
                               GeoUtils.formatDistance(distance),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
                               ),
                             ),
                           ],
