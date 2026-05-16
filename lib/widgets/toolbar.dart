@@ -318,6 +318,13 @@ class GpxDrawer extends StatelessWidget {
                             onTap: () =>
                                 run((ctx) => _exportFile(ctx, provider)),
                           ),
+                          _DrawerItem(
+                            icon: Icons.watch_rounded,
+                            label: 'Export TCX (Garmin)',
+                            enabled: hasData,
+                            onTap: () =>
+                                run((ctx) => _exportTcxFile(ctx, provider)),
+                          ),
                           const SizedBox(height: 8),
                           _DrawerSection(label: 'Waypoints'),
                           _DrawerItem(
@@ -857,6 +864,50 @@ void _exportFile(BuildContext context, GpxProvider provider) {
       ),
     );
   }
+}
+
+void _exportTcxFile(BuildContext context, GpxProvider provider) {
+  try {
+    final xml = provider.exportTcxToString();
+    final bytes = utf8.encode(xml);
+    final blob = web.Blob(
+      [bytes.toJS].toJS,
+      web.BlobPropertyBag(type: 'application/vnd.garmin.tcx+xml'),
+    );
+    final url = web.URL.createObjectURL(blob);
+    final fileName = _tcxFileName(provider.fileName);
+
+    final anchor = web.HTMLAnchorElement()
+      ..href = url
+      ..download = fileName;
+    anchor.click();
+
+    web.URL.revokeObjectURL(url);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('TCX file exported — upload to Garmin Connect as course'),
+        backgroundColor: Color(0xFF22C55E),
+        duration: Duration(seconds: 3),
+      ),
+    );
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Failed to export TCX: $e'),
+        backgroundColor: const Color(0xFFEF4444),
+      ),
+    );
+  }
+}
+
+String _tcxFileName(String? source) {
+  final raw = (source ?? '').trim();
+  if (raw.isEmpty) return 'course.tcx';
+  final dot = raw.lastIndexOf('.');
+  final stem = dot > 0 ? raw.substring(0, dot) : raw;
+  final clean = stem.trim().isEmpty ? 'course' : stem.trim();
+  return '$clean.tcx';
 }
 
 /// Forces a `.gpx` extension regardless of the source filename. Prevents

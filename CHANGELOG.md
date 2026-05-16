@@ -4,6 +4,20 @@ All notable changes to GPXR are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] — 2026-05-16
+
+### Added
+- **Export TCX (Garmin)**: drawer menu → Export TCX writes a Garmin
+  Training Center Database v2 `<Course>` document with each waypoint
+  emitted as an ordered `<CoursePoint>` block. Garmin Connect places
+  course points by `<Time>` rather than projecting lat/lon onto the
+  nearest segment, so on out-and-back / lollipop routes every aid
+  station now lands at the correct km when the course is uploaded to a
+  Garmin watch. Times are synthesized from a constant trail-running
+  pace (≈ 8 km/h) — Garmin only requires monotonic ordering, not
+  realistic timing. The plain `.gpx` export is unchanged for tools
+  like mapy.com that don't speak TCX.
+
 ## [1.5.1] — 2026-05-16
 
 ### Fixed
@@ -115,6 +129,7 @@ Initial public release.
 - Activity profile (Trail run / Bike) drives climb / descent
   thresholds and grade-colour ramps.
 
+[1.6.0]: https://github.com/SedlarDavid/gpxr/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/SedlarDavid/gpxr/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/SedlarDavid/gpxr/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/SedlarDavid/gpxr/compare/v1.3.0...v1.4.0

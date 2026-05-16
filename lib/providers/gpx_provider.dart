@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:web/web.dart' as web;
 import '../models/gpx_models.dart';
 import '../services/gpx_parser.dart';
+import '../services/tcx_exporter.dart';
 import '../utils/climb_detector.dart';
 import '../utils/descent_detector.dart';
 import '../utils/elevation_profile.dart';
@@ -43,6 +44,7 @@ class GpxProvider extends ChangeNotifier {
   }
 
   final GpxParser _parser = GpxParser();
+  final TcxExporter _tcxExporter = TcxExporter();
 
   GpxData? _data;
   GpxData? get data => _data;
@@ -369,6 +371,17 @@ class GpxProvider extends ChangeNotifier {
   String exportToString() {
     if (_data == null) throw Exception('No data to export');
     return _parser.export(_data!);
+  }
+
+  /// Exports the current course as a Garmin TCX `<Course>` document.
+  /// Waypoints are emitted as ordered `<CoursePoint>` blocks with
+  /// synthesized monotonic times so Garmin Connect places aid stations
+  /// at the correct km on out-and-back / lollipop routes — GPX `<wpt>`
+  /// projection is ambiguous when a single lat/lon lies on the track
+  /// at multiple cumulative distances.
+  String exportTcxToString() {
+    if (_data == null) throw Exception('No data to export');
+    return _tcxExporter.export(data: _data!, tracks: visibleTracks);
   }
 
   void createNew() {
