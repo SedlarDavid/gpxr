@@ -141,20 +141,26 @@ class GpxParser {
     }
 
     // Custom GPXR extensions: cutoff time, and the original cumulative
-    // track distance (meters) the waypoint was placed at. Use local-name
-    // matches so we don't fail on files that omit our namespace decl.
+    // track distance (meters) the waypoint was placed at. Match on the
+    // local name (namespace '*') so files that prefix our extensions
+    // with `gpxr:` round-trip correctly — `findAllElements('cutoff')`
+    // without a namespace would only match unqualified elements and
+    // silently miss our own exports.
     String? cutoff;
     double? trackDistance;
     final ext = el.getElement('extensions');
     if (ext != null) {
-      for (final child in ext.findAllElements('cutoff')) {
+      for (final child in ext.findAllElements('cutoff', namespace: '*')) {
         final t = child.innerText.trim();
         if (t.isNotEmpty) {
           cutoff = t;
           break;
         }
       }
-      for (final child in ext.findAllElements('trackDistance')) {
+      for (final child in ext.findAllElements(
+        'trackDistance',
+        namespace: '*',
+      )) {
         final t = child.innerText.trim();
         final v = double.tryParse(t);
         if (v != null) {

@@ -4,6 +4,18 @@ All notable changes to GPXR are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] — 2026-05-16
+
+### Fixed
+- **Re-import of GPXR-exported GPX dropped stored track distances**:
+  `findAllElements('trackDistance')` without an explicit namespace
+  only matched the unqualified local name, so our own exports —
+  which emit `<gpxr:trackDistance>` (and `<gpxr:cutoff>`) — were
+  parsed back without those extensions. Out-and-back routes then
+  fell through to projection-based km display and aid stations
+  shifted onto the wrong pass again. Parser now matches with
+  `namespace: '*'` so both prefixed and unprefixed forms round-trip.
+
 ## [1.6.0] — 2026-05-16
 
 ### Added
@@ -129,6 +141,7 @@ Initial public release.
 - Activity profile (Trail run / Bike) drives climb / descent
   thresholds and grade-colour ramps.
 
+[1.6.1]: https://github.com/SedlarDavid/gpxr/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/SedlarDavid/gpxr/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/SedlarDavid/gpxr/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/SedlarDavid/gpxr/compare/v1.4.0...v1.5.0

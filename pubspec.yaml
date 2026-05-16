@@ -1,7 +1,7 @@
 name: gpxr
 description: "A lightweight GPX route editor for the web."
 publish_to: 'none'
-version: 1.6.0+8
+version: 1.6.1+9
 
 environment:
   sdk: ^3.11.1
