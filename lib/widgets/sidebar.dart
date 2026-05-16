@@ -221,7 +221,7 @@ class _RouteStats extends StatelessWidget {
             if (nearest == null) continue;
             ticks.add(
               WaypointTick(
-                distance: nearest.distance,
+                distance: wpt.trackDistance ?? nearest.distance,
                 color: WaypointIcons.colorFor(wpt.type),
                 icon: WaypointIcons.iconFor(wpt.type),
                 offTrack:
@@ -1158,7 +1158,7 @@ class WaypointsList extends StatelessWidget {
               key: ValueKey(wpt.id),
               waypoint: wpt,
               isSelected: isSelected,
-              cumulativeDistance: nearest?.distance,
+              cumulativeDistance: wpt.trackDistance ?? nearest?.distance,
               offTrackMeters: (nearest != null && !onTrack)
                   ? nearest.distanceToLineMeters
                   : null,
@@ -2156,7 +2156,7 @@ class SplitsList extends StatelessWidget {
           rows.add(
             _SplitRow(
               name: _firstNonBlank(wpt.name) ?? _defaultName(wpt.type),
-              distance: nearest.distance,
+              distance: wpt.trackDistance ?? nearest.distance,
               color: WaypointIcons.colorFor(wpt.type),
               icon: WaypointIcons.iconFor(wpt.type),
               offTrack:

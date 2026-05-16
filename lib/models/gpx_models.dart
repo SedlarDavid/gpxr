@@ -147,6 +147,7 @@ class GpxWaypoint {
     this.type = WaypointType.generic,
     this.time,
     this.cutoff,
+    this.trackDistance,
   }) : id = id ?? _uuid.v4();
 
   final String id;
@@ -164,6 +165,14 @@ class GpxWaypoint {
   /// about it ignore it silently.
   final String? cutoff;
 
+  /// Cumulative distance along the track (meters) when the waypoint was
+  /// placed by km, snapped to track, or auto-generated. Stored explicitly
+  /// because on out-and-back / lollipop routes the same lat/lon can lie
+  /// on the track at multiple km values, and projecting back from lat/lon
+  /// would pick an arbitrary pass. Cleared whenever the waypoint is moved
+  /// to a free lat/lon, so projection takes over again.
+  final double? trackDistance;
+
   GpxWaypoint copyWith({
     LatLng? latLng,
     double? elevation,
@@ -173,6 +182,8 @@ class GpxWaypoint {
     DateTime? time,
     String? cutoff,
     bool clearCutoff = false,
+    double? trackDistance,
+    bool clearTrackDistance = false,
   }) {
     return GpxWaypoint(
       id: id,
@@ -183,6 +194,9 @@ class GpxWaypoint {
       type: type ?? this.type,
       time: time ?? this.time,
       cutoff: clearCutoff ? null : (cutoff ?? this.cutoff),
+      trackDistance: clearTrackDistance
+          ? null
+          : (trackDistance ?? this.trackDistance),
     );
   }
 }

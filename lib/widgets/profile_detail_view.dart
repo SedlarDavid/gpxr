@@ -69,7 +69,7 @@ class _ProfileDetailViewState extends State<ProfileDetailView>
             if (nearest == null) continue;
             ticks.add(
               WaypointTick(
-                distance: nearest.distance,
+                distance: wpt.trackDistance ?? nearest.distance,
                 color: WaypointIcons.colorFor(wpt.type),
                 icon: WaypointIcons.iconFor(wpt.type),
                 offTrack:

@@ -43,7 +43,10 @@ files never leave your browser. Works on desktop and mobile.
   with a small vertical offset so they're all visible and clickable
 - **Add by km**: enter a distance from the race brief instead of
   hunting for the spot on the map (drawer menu → Add by km, or the
-  "Add by km" button on the empty waypoints state)
+  "Add by km" button on the empty waypoints state). The original
+  along-track distance is persisted, so out-and-back and lollipop
+  routes that pass the same point twice still show the correct km
+  for every waypoint
 - **Edit by km**: the waypoint edit dialog exposes the projected
   distance along the track — change the number to slide the waypoint
   along the route, useful when a race brief is updated and an aid

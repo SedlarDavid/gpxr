@@ -140,15 +140,25 @@ class GpxParser {
       resolved = WaypointType.fromSym(type);
     }
 
-    // Custom GPXR extensions: cutoff time. Use a local-name match so we
-    // don't fail on files that omit our namespace declaration.
+    // Custom GPXR extensions: cutoff time, and the original cumulative
+    // track distance (meters) the waypoint was placed at. Use local-name
+    // matches so we don't fail on files that omit our namespace decl.
     String? cutoff;
+    double? trackDistance;
     final ext = el.getElement('extensions');
     if (ext != null) {
       for (final child in ext.findAllElements('cutoff')) {
         final t = child.innerText.trim();
         if (t.isNotEmpty) {
           cutoff = t;
+          break;
+        }
+      }
+      for (final child in ext.findAllElements('trackDistance')) {
+        final t = child.innerText.trim();
+        final v = double.tryParse(t);
+        if (v != null) {
+          trackDistance = v;
           break;
         }
       }
@@ -162,6 +172,7 @@ class GpxParser {
       type: resolved,
       time: timeStr != null ? DateTime.tryParse(timeStr) : null,
       cutoff: cutoff,
+      trackDistance: trackDistance,
     );
   }
 
@@ -217,11 +228,21 @@ class GpxParser {
         // name/cmt/desc/src/link.
         builder.element('sym', nest: wpt.type.sym);
         builder.element('type', nest: wpt.type.gpxType);
-        if (wpt.cutoff != null && wpt.cutoff!.isNotEmpty) {
+        final hasCutoff = wpt.cutoff != null && wpt.cutoff!.isNotEmpty;
+        final hasTrackDistance = wpt.trackDistance != null;
+        if (hasCutoff || hasTrackDistance) {
           builder.element(
             'extensions',
             nest: () {
-              builder.element('gpxr:cutoff', nest: wpt.cutoff);
+              if (hasCutoff) {
+                builder.element('gpxr:cutoff', nest: wpt.cutoff);
+              }
+              if (hasTrackDistance) {
+                builder.element(
+                  'gpxr:trackDistance',
+                  nest: wpt.trackDistance!.toStringAsFixed(2),
+                );
+              }
             },
           );
         }

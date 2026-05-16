@@ -477,9 +477,11 @@ class GpxProvider extends ChangeNotifier {
     final nearest = profile.nearestOnTrack(latLng);
     LatLng resolved = latLng;
     double? elevation;
+    double? trackDistance;
     if (nearest != null && nearest.distanceToLineMeters <= snapTolerance) {
       resolved = nearest.latLng;
       elevation = profile.sampleAtDistance(nearest.distance).elevation;
+      trackDistance = nearest.distance;
     }
     final wpt = GpxWaypoint(
       latLng: resolved,
@@ -489,6 +491,7 @@ class GpxProvider extends ChangeNotifier {
           '${(type ?? _selectedWaypointType).label} ${_data!.waypoints.length + 1}',
       type: type ?? _selectedWaypointType,
       cutoff: cutoff,
+      trackDistance: trackDistance,
     );
     _data!.waypoints.add(wpt);
     notifyListeners();
@@ -516,6 +519,7 @@ class GpxProvider extends ChangeNotifier {
       name: name ?? '${resolvedType.label} ${_data!.waypoints.length + 1}',
       type: resolvedType,
       cutoff: cutoff,
+      trackDistance: clamped,
     );
     _data!.waypoints.add(wpt);
     notifyListeners();
@@ -546,6 +550,7 @@ class GpxProvider extends ChangeNotifier {
           elevation: sample.elevation,
           name: 'Summit $counter (+${climb.gain.round()} m)',
           type: WaypointType.summit,
+          trackDistance: climb.endDistance,
         ),
       );
       added++;
@@ -574,6 +579,7 @@ class GpxProvider extends ChangeNotifier {
           wpt = incoming.copyWith(
             latLng: nearest.latLng,
             elevation: incoming.elevation ?? sample.elevation,
+            trackDistance: nearest.distance,
           );
         }
       }
@@ -599,6 +605,7 @@ class GpxProvider extends ChangeNotifier {
     _data!.waypoints[idx] = _data!.waypoints[idx].copyWith(
       latLng: nearest.latLng,
       elevation: sample.elevation,
+      trackDistance: nearest.distance,
     );
     _invalidateWaypointProjection(id);
     notifyListeners();
@@ -611,8 +618,13 @@ class GpxProvider extends ChangeNotifier {
   WaypointTrackInfo? waypointTrackInfo(GpxWaypoint wpt) {
     final nearest = nearestOnTrackForWaypoint(wpt);
     if (nearest == null) return null;
+    // Prefer the stored track distance — it's authoritative on out-and-
+    // back / lollipop routes where a single lat/lon lies on the track at
+    // multiple km values. Projection is only used to compute the
+    // perpendicular offset (off-track warning).
+    final distance = wpt.trackDistance ?? nearest.distance;
     return WaypointTrackInfo(
-      distance: nearest.distance,
+      distance: distance,
       offsetMeters: nearest.distanceToLineMeters,
       onTrack: nearest.distanceToLineMeters <= snapTolerance,
     );
@@ -645,6 +657,9 @@ class GpxProvider extends ChangeNotifier {
       latLng: latLng,
       cutoff: cutoff,
       clearCutoff: clearCutoff,
+      // Free-form lat/lon change invalidates the stored along-track
+      // distance — projection takes over again.
+      clearTrackDistance: latLng != null,
     );
     if (latLng != null) _invalidateWaypointProjection(id);
     notifyListeners();
@@ -654,7 +669,10 @@ class GpxProvider extends ChangeNotifier {
     if (_data == null) return;
     final idx = _data!.waypoints.indexWhere((w) => w.id == id);
     if (idx != -1) {
-      _data!.waypoints[idx] = _data!.waypoints[idx].copyWith(latLng: newLatLng);
+      _data!.waypoints[idx] = _data!.waypoints[idx].copyWith(
+        latLng: newLatLng,
+        clearTrackDistance: true,
+      );
       _invalidateWaypointProjection(id);
       notifyListeners();
     }
@@ -674,6 +692,7 @@ class GpxProvider extends ChangeNotifier {
     _data!.waypoints[idx] = _data!.waypoints[idx].copyWith(
       latLng: sample.latLng,
       elevation: sample.elevation,
+      trackDistance: clamped,
     );
     _invalidateWaypointProjection(id);
     notifyListeners();
